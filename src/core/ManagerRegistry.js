@@ -29,6 +29,10 @@ class ManagerRegistry {
         return this.managers.has(name);
     }
 
+    count() {
+        return this.managers.size;
+    }
+
     async initializeAll() {
         Logger.info('Initializing all managers...');
         
