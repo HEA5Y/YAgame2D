@@ -1,316 +1,171 @@
 /**
- * Класс Game - Рефакторинг
- * Центральный фасад приложения с использованием ManagerRegistry
- * Поэтапная инициализация, устранение жёстких зависимостей
+ * Game.js - Основной класс игры
+ * Координирует работу всех менеджеров через ManagerRegistry
  */
+
 class Game {
     constructor() {
-        this.canvas = document.getElementById('game-canvas');
-        this.ctx = this.canvas.getContext('2d', { alpha: false });
+        this.isRunning = false;
+        this.lastTime = 0;
+        this.accumulator = 0;
+        this.step = 1 / 60; // Фиксированный шаг физики (60 FPS)
         
-        this.engine = new Engine(this);
-        this.registry = null;
-        this.handleResize = this.handleResize.bind(this);
+        // Ссылки на ключевые системы (получаем из реестра)
+        this.canvasManager = null;
+        this.timeManager = null;
+        this.factoryManager = null;
+        this.uiManager = null;
+        this.saveManager = null;
+        
+        Logger.info('Game', 'Конструктор Game запущен');
     }
 
-    async bootstrap() {
+    /**
+     * Инициализация игры
+     */
+    async init() {
         try {
-            await this._initSDK();
-            await this._createManagers();
-            await this._loadResources();
-            this._registerEvents();
-            await this._loadSave();
-            this._processOffline();
-            this._startGame();
-        } catch (error) {
-            Logger.error('Game', 'Критическая ошибка:', error);
-            // ErrorGuard уже перехватит ошибку через window.onerror, 
-            // но на всякий случай покажем детали в консоли
-            console.error('FATAL BOOTSTRAP ERROR:', error);
-            throw error; // Пробрасываем дальше для перехвата ErrorGuard
-        }
-    }
+            Logger.info('Game', 'Начало инициализации...');
 
-    async _initSDK() {
-        this.updateLoadingProgress(10, 'Подключение Yandex SDK...');
-        await yandexSDK.initialize();
-        Logger.info('Game', 'Yandex SDK инициализирован');
-    }
+            // 1. Получаем доступ к системам из реестра
+            this.canvasManager = ManagerRegistry.get('CanvasManager');
+            this.timeManager = ManagerRegistry.get('TimeManager');
+            this.factoryManager = ManagerRegistry.get('FactoryManager');
+            this.uiManager = ManagerRegistry.get('UIManager');
+            this.saveManager = ManagerRegistry.get('SaveManager');
+            this.economyManager = ManagerRegistry.get('EconomyManager');
 
-    async _createManagers() {
-        this.updateLoadingProgress(30, 'Инициализация подсистем...');
-        // Менеджеры уже зарегистрированы в ManagersInitializer.init()
-        this.registry = window.ManagerRegistry;
-        await this.registry.initializeAll();
-        window.gameRegistry = this.registry;
-        Logger.info('Game', `Инициализировано ${this.registry.count()} менеджеров`);
-    }
-
-    async _loadResources() {
-        this.updateLoadingProgress(60, 'Загрузка ассетов...');
-        const assetManager = this.registry.get('asset');
-        if (assetManager && typeof assetManager.loadAll === 'function') {
-            await assetManager.loadAll();
-        }
-        Logger.info('Game', 'Ресурсы загружены');
-    }
-
-    _registerEvents() {
-        this.updateLoadingProgress(95, 'Подготовка сцен...');
-        window.addEventListener('resize', this.handleResize);
-        this.handleResize();
-        this._subscribeToEvents();
-        Logger.info('Game', 'События зарегистрированы');
-    }
-
-    async _loadSave() {
-        const saveManager = this.registry.get('save');
-        await saveManager.loadGame();
-        Logger.info('Game', 'Сохранения загружены');
-    }
-
-    _processOffline() {
-        const offlineManager = this.registry.get('offline');
-        offlineManager.processOfflineIncome();
-        Logger.info('Game', 'Оффлайн-доход обработан');
-    }
-
-    _startGame() {
-        this.updateLoadingProgress(100, 'Готово!');
-        const loadingScreen = document.getElementById('loading-screen');
-        loadingScreen.style.opacity = '0';
-        setTimeout(() => loadingScreen.remove(), 500);
-        
-        Logger.info('Game', 'Запуск игрового движка');
-        const sceneManager = this.registry.get('scene');
-        sceneManager.changeScene('BootScene');
-        this.engine.start();
-        gameEventBus.emit(GameConfig.EVENTS.ENGINE_INIT_COMPLETE);
-        
-        this._initUI();
-        yandexSDK.gameReady();
-        
-        if (GameConfig.YANDEX_GAMES.ANALYTICS_ENABLED) {
-            yandexSDK.logEvent('GameStarted', {
-                timestamp: Date.now(),
-                version: GameConfig.GAME.VERSION
-            });
-        }
-    }
-
-    _initUI() {
-        const uiManager = this.registry.get('ui');
-        uiManager.createNotificationContainer();
-        
-        const dailyManager = this.registry.get('daily');
-        if (dailyManager && dailyManager.isRewardAvailable()) {
-            setTimeout(() => uiManager.showDailyRewardPopup(), 1000);
-        }
-        
-        const saveManager = this.registry.get('save');
-        const saveData = saveManager.collectSaveData();
-        if (!saveData.factory || Object.keys(saveData.factory).length === 0) {
-            setTimeout(() => this._showTutorial(), 2000);
-        }
-    }
-
-    _showTutorial() {
-        const uiManager = this.registry.get('ui');
-        const steps = [
-            { text: '👋 Добро пожаловать в Brainrot Factory!', icon: '🏭', duration: 3000 },
-            { text: '💰 Кликай по линиям чтобы собрать ресурсы', icon: '👆', duration: 4000 },
-            { text: '⬆️ Улучшай линии для увеличения производства', icon: '📈', duration: 4000 },
-            { text: '🎁 Забирай бесплатные сундуки каждые 10 минут!', icon: '🎁', duration: 3000 },
-            { text: '🚀 Поехали!', icon: '⭐', duration: 2000 }
-        ];
-        
-        let i = 0;
-        const next = () => {
-            if (i < steps.length) {
-                uiManager.showNotification(steps[i].text, steps[i].icon);
-                i++;
-                setTimeout(next, steps[i-1].duration);
+            if (!this.canvasManager || !this.timeManager) {
+                throw new Error('Критические менеджеры не найдены в реестре!');
             }
-        };
-        next();
+
+            // 2. Настраиваем Canvas
+            this.canvasManager.init();
+            
+            // 3. Загружаем сохранение (если есть)
+            if (this.saveManager) {
+                await this.saveManager.load();
+            }
+
+            // 4. Инициализируем UI после загрузки данных
+            if (this.uiManager) {
+                this.uiManager.init();
+                this.uiManager.updateResources();
+            }
+
+            // 5. Запускаем фабрику
+            if (this.factoryManager) {
+                this.factoryManager.init();
+            }
+
+            Logger.info('Game', 'Инициализация завершена успешно');
+            return true;
+
+        } catch (error) {
+            Logger.error('Game', 'Ошибка инициализации:', error);
+            ErrorGuard.showCriticalError(error);
+            return false;
+        }
     }
 
-    _subscribeToEvents() {
-        gameEventBus.on(GameConfig.EVENTS.CURRENCY_CHANGED, (data) => {
-            if (data.delta && data.delta.isGreaterThan(0)) {
-                const ui = this.registry.get('ui');
-                if (ui && data.delta.isGreaterThan(100)) {
-                    ui.showNotification(`+${data.delta.format()} ${data.currency}`, '💰');
+    /**
+     * Запуск игрового цикла
+     */
+    start() {
+        if (this.isRunning) return;
+        
+        this.isRunning = true;
+        this.lastTime = performance.now();
+        Logger.info('Game', 'Игровой цикл запущен');
+        
+        requestAnimationFrame((t) => this.loop(t));
+    }
+
+    /**
+     * Основной игровой цикл
+     */
+    loop(currentTime) {
+        if (!this.isRunning) return;
+
+        const deltaTime = (currentTime - this.lastTime) / 1000;
+        this.lastTime = currentTime;
+
+        // Ограничиваем deltaTime, чтобы избежать скачков при переключении вкладок
+        const safeDelta = Math.min(deltaTime, 0.1);
+
+        try {
+            // 1. Обновление логики (Update)
+            this.update(safeDelta);
+
+            // 2. Отрисовка (Render)
+            this.render();
+
+        } catch (error) {
+            Logger.error('Game', 'Ошибка в игровом цикле:', error);
+            // Не останавливаем игру полностью, чтобы игрок мог сохранить прогресс
+        }
+
+        requestAnimationFrame((t) => this.loop(t));
+    }
+
+    /**
+     * Логика игры
+     */
+    update(dt) {
+        // Обновляем время
+        if (this.timeManager) this.timeManager.update(dt);
+
+        // Обновляем фабрику
+        if (this.factoryManager) this.factoryManager.update(dt);
+
+        // Обновляем другие активные системы через реестр
+        const managers = ManagerRegistry.getAll();
+        for (const key in managers) {
+            const manager = managers[key];
+            if (manager !== this.factoryManager && manager !== this.timeManager) {
+                if (typeof manager.update === 'function') {
+                    try {
+                        manager.update(dt);
+                    } catch (e) {
+                        // Тихая ошибка для второстепенных менеджеров
+                    }
                 }
             }
-        });
-
-        gameEventBus.on(GameConfig.EVENTS.ACHIEVEMENT_UNLOCKED, (data) => {
-            const ui = this.registry.get('ui');
-            const juice = this.registry.get('juice');
-            if (ui) ui.showNotification(`🏆 Достижение: ${data.name}`, '🏆');
-            if (juice) {
-                juice.triggerScreenShake(10);
-                juice.spawnConfetti(window.innerWidth / 2, window.innerHeight / 2);
-            }
-            if (GameConfig.YANDEX_GAMES.ANALYTICS_ENABLED) {
-                yandexSDK.logEvent('AchievementUnlocked', { achievementName: data.name });
-            }
-        });
-
-        gameEventBus.on(GameConfig.EVENTS.QUEST_COMPLETED, (data) => {
-            const ui = this.registry.get('ui');
-            if (ui) ui.showNotification(`✅ Квест выполнен: ${data.description}`, '✅');
-        });
-        
-        gameEventBus.on(GameConfig.EVENTS.RARE_ITEM_OBTAINED, (data) => {
-            const ui = this.registry.get('ui');
-            const juice = this.registry.get('juice');
-            if (ui) ui.showRareItemPopup(data.item, data.rarity);
-            if (juice) {
-                juice.triggerScreenShake(15);
-                juice.spawnFireworks(window.innerWidth / 2, window.innerHeight / 2);
-            }
-        });
-
-        gameEventBus.on('show_notification', (data) => {
-            const ui = this.registry.get('ui');
-            if (ui) ui.showNotification(data.text, data.icon);
-        });
-        
-        gameEventBus.on('factory_upgraded', (data) => {
-            if (GameConfig.YANDEX_GAMES.ANALYTICS_ENABLED) {
-                yandexSDK.logEvent('FactoryUpgrade', {
-                    lineId: data.lineId,
-                    level: data.level,
-                    cost: data.cost.toString()
-                });
-            }
-        });
-        
-        gameEventBus.on(GameConfig.EVENTS.PRESTIGE_ACTIVATED, (data) => {
-            if (GameConfig.YANDEX_GAMES.ANALYTICS_ENABLED) {
-                yandexSDK.logEvent('Prestige', {
-                    brainCellsEarned: data.brainCells.toString(),
-                    totalPrestiges: data.totalPrestiges
-                });
-            }
-        });
-        
-        gameEventBus.on('ad_watched', (data) => {
-            if (GameConfig.YANDEX_GAMES.ANALYTICS_ENABLED) {
-                yandexSDK.logEvent('WatchAd', {
-                    adType: data.adType,
-                    reward: data.reward
-                });
-            }
-        });
-    }
-
-    handleResize() {
-        const dpr = window.devicePixelRatio || 1;
-        const container = document.getElementById('game-container');
-        const targetRatio = GameConfig.ENGINE.CANVAS_LOGICAL_WIDTH / GameConfig.ENGINE.CANVAS_LOGICAL_HEIGHT;
-        const containerRatio = container.clientWidth / container.clientHeight;
-
-        let displayWidth, displayHeight;
-        if (containerRatio < targetRatio) {
-            displayWidth = container.clientWidth;
-            displayHeight = container.clientWidth / targetRatio;
-        } else {
-            displayHeight = container.clientHeight;
-            displayWidth = container.clientHeight * targetRatio;
-        }
-
-        this.canvas.width = displayWidth * dpr;
-        this.canvas.height = displayHeight * dpr;
-
-        this.ctx.setTransform(
-            (displayWidth * dpr) / GameConfig.ENGINE.CANVAS_LOGICAL_WIDTH,
-            0,
-            0,
-            (displayHeight * dpr) / GameConfig.ENGINE.CANVAS_LOGICAL_HEIGHT,
-            0,
-            0
-        );
-
-        gameEventBus.emit(GameConfig.EVENTS.RESIZE, {
-            width: GameConfig.ENGINE.CANVAS_LOGICAL_WIDTH,
-            height: GameConfig.ENGINE.CANVAS_LOGICAL_HEIGHT,
-            scale: dpr
-        });
-    }
-
-    updateLoadingProgress(percent, text) {
-        const fill = document.getElementById('loader-bar-fill');
-        const textElement = document.getElementById('loader-text');
-        if (fill) fill.style.width = `${percent}%`;
-        if (textElement) textElement.innerText = `${text} ${Math.floor(percent)}%`;
-    }
-
-    update(dt) {
-        try {
-            if (this.registry && typeof this.registry.updateAll === 'function') {
-                this.registry.updateAll(dt);
-            }
-        } catch (error) {
-            console.error('❌ Update error:', error);
-            // Не пробрасываем ошибку дальше чтобы не ломать весь цикл
         }
     }
 
+    /**
+     * Отрисовка
+     */
     render() {
-        try {
-            if (!this.ctx || !this.registry) return;
-            
-            this.ctx.fillStyle = '#0d0f12';
-            this.ctx.fillRect(0, 0, GameConfig.ENGINE.CANVAS_LOGICAL_WIDTH, GameConfig.ENGINE.CANVAS_LOGICAL_HEIGHT);
-            
-            if (typeof this.registry.renderAll === 'function') {
-                this.registry.renderAll(this.ctx);
-            }
-        } catch (error) {
-            console.error('❌ Render error:', error);
-            // Не пробрасываем ошибку дальше чтобы не ломать весь цикл
+        const ctx = this.canvasManager.getContext();
+        if (!ctx) return;
+
+        // Очистка и сброс трансформации
+        this.canvasManager.resetTransform();
+        ctx.clearRect(0, 0, this.canvasManager.width, this.canvasManager.height);
+
+        // Рендер фона/мира
+        if (this.factoryManager) {
+            this.factoryManager.render(ctx);
         }
+
+        // Рендер частиц и эффектов
+        const particleManager = ManagerRegistry.get('ParticleManager');
+        if (particleManager) particleManager.render(ctx);
+
+        const juiceManager = ManagerRegistry.get('JuiceManager');
+        if (juiceManager) juiceManager.render(ctx);
     }
-    
-    handleCanvasClick(event) {
-        if (!this.registry) return false;
-        
-        const rect = this.canvas.getBoundingClientRect();
-        const scaleX = this.canvas.width / rect.width;
-        const scaleY = this.canvas.height / rect.height;
-        
-        const clickX = (event.clientX - rect.left) * scaleX / (window.devicePixelRatio || 1);
-        const clickY = (event.clientY - rect.top) * scaleY / (window.devicePixelRatio || 1);
-        
-        const factoryManager = this.registry.get('factory');
-        if (factoryManager && factoryManager.handleClick(clickX, clickY)) {
-            return true;
-        }
-        
-        const chestManager = this.registry.get('chest');
-        if (chestManager && chestManager.handleClick(clickX, clickY)) {
-            return true;
-        }
-        
-        return false;
-    }
-    
-    _handleFatalError(error) {
-        const loadingScreen = document.getElementById('loading-screen');
-        if (loadingScreen) {
-            loadingScreen.innerHTML = `
-                <div style="color: #ff0055; font-size: 24px; text-align: center; padding: 40px;">
-                    <h2>😱 Ошибка загрузки!</h2>
-                    <p>${error.message}</p>
-                    <button onclick="location.reload()" style="margin-top: 20px; padding: 15px 30px; font-size: 18px; background: #ff0055; color: white; border: none; border-radius: 10px; cursor: pointer;">
-                        🔄 Перезагрузить
-                    </button>
-                </div>
-            `;
-            loadingScreen.style.opacity = '1';
-        }
+
+    /**
+     * Остановка игры
+     */
+    stop() {
+        this.isRunning = false;
+        Logger.info('Game', 'Игровой цикл остановлен');
     }
 }
+
+// Делаем класс глобально доступным
+window.Game = Game;

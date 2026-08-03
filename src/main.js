@@ -1,116 +1,100 @@
 /**
- * main.js - Точка входа приложения
- * Инициализирует игру и обрабатывает события ввода
+ * main.js - Точка входа в приложение
+ * Запускает инициализацию после загрузки DOM
  */
 
-window.addEventListener('load', () => {
-    Logger.info('Main', 'Запуск Brainrot Factory Evolution...');
-    
-    // Создаем экземпляр игры
-    const game = new Game();
-    
-    // Запускаем процесс инициализации
-    game.bootstrap().then(() => {
-        Logger.info('Main', 'Игра успешно инициализирована');
-        
-        // Обработка кликов по canvas (мышь)
-        game.canvas.addEventListener('click', (e) => {
-            game.handleCanvasClick(e);
-        });
-        
-        // Обработка touch событий (мобильные устройства)
-        game.canvas.addEventListener('touchstart', (e) => {
-            e.preventDefault();
-            
-            // Обрабатываем все касания
-            for (let i = 0; i < e.changedTouches.length; i++) {
-                const touch = e.changedTouches[i];
-                game.handleCanvasClick({ 
-                    clientX: touch.clientX, 
-                    clientY: touch.clientY 
-                });
-            }
-        }, { passive: false });
-        
-        // Обработка двойного тапа для зума (опционально)
-        let lastTapTime = 0;
-        game.canvas.addEventListener('touchend', (e) => {
-            const currentTime = Date.now();
-            if (currentTime - lastTapTime < 300) {
-                // Двойной тап detected
-                Logger.debug('Main', 'Двойной тап');
-            }
-            lastTapTime = currentTime;
-        });
-        
-        // Предотвращение контекстного меню на мобильных
-        game.canvas.addEventListener('contextmenu', (e) => {
-            e.preventDefault();
-            return false;
-        });
-        
-    }).catch((error) => {
-        Logger.error('Main', 'Ошибка при инициализации игры', error);
-        
-        // Показываем пользователю ошибку
+document.addEventListener('DOMContentLoaded', async () => {
+    Logger.info('Main', 'DOM загружен, старт приложения...');
+
+    try {
+        // 1. Показываем экран загрузки
         const loadingScreen = document.getElementById('loading-screen');
+        const gameContainer = document.getElementById('game-container');
+        const progressFill = document.querySelector('.progress-fill');
+        
         if (loadingScreen) {
-            loadingScreen.innerHTML = `
-                <div style="color: #ff4444; text-align: center; padding: 20px;">
-                    <h2>😕 Ошибка загрузки</h2>
-                    <p>Произошла ошибка при запуске игры.</p>
-                    <p style="font-size: 12px; color: #888;">${error.message}</p>
-                    <button onclick="location.reload()" style="
-                        background: #ff0055;
-                        border: none;
-                        color: white;
-                        padding: 12px 24px;
-                        border-radius: 8px;
-                        font-size: 16px;
-                        cursor: pointer;
-                        margin-top: 20px;
-                    ">Попробовать снова</button>
-                </div>
-            `;
+            loadingScreen.style.display = 'flex';
         }
-    });
-    
-    // Обработка изменения ориентации устройства
-    window.addEventListener('orientationchange', () => {
+
+        // Эмуляция прогресса загрузки
+        let progress = 0;
+        const interval = setInterval(() => {
+            progress += Math.random() * 15;
+            if (progress > 90) progress = 90;
+            if (progressFill) {
+                progressFill.style.width = `${progress}%`;
+            }
+        }, 200);
+
+        // 2. Инициализируем менеджеры (через ManagersInitializer)
+        if (typeof ManagersInitializer !== 'undefined') {
+            await ManagersInitializer.init();
+            // Создаем зависимые менеджеры (Factory и т.д.)
+            ManagersInitializer.initDependentManagers();
+        } else {
+            throw new Error('ManagersInitializer не найден! Проверьте порядок скриптов.');
+        }
+
+        // 3. Создаем экземпляр игры
+        if (typeof Game === 'undefined') {
+            throw new Error('Класс Game не найден!');
+        }
+        
+        window.gameInstance = new Game();
+
+        // 4. Инициализируем игру
+        const success = await window.gameInstance.init();
+
+        if (!success) {
+            throw new Error('Инициализация игры вернула false');
+        }
+
+        // 5. Скрываем загрузку, показываем игру
+        clearInterval(interval);
+        if (progressFill) progressFill.style.width = '100%';
+        
         setTimeout(() => {
-            game.handleResize();
-        }, 100);
-    });
-    
-    // Обработка изменения размера окна
-    window.addEventListener('resize', () => {
-        game.handleResize();
-    });
-    
-    // Сохранение при закрытии вкладки
-    window.addEventListener('beforeunload', () => {
-        if (game.managers && game.managers.save) {
-            game.managers.save.forceSave();
+            if (loadingScreen) {
+                loadingScreen.style.opacity = '0';
+                loadingScreen.style.transition = 'opacity 0.5s ease';
+                setTimeout(() => {
+                    loadingScreen.style.display = 'none';
+                    if (gameContainer) gameContainer.style.display = 'block';
+                    
+                    // 6. Запускаем цикл
+                    window.gameInstance.start();
+                    Logger.info('Main', 'Игра запущена успешно!');
+                }, 500);
+            } else {
+                if (gameContainer) gameContainer.style.display = 'block';
+                window.gameInstance.start();
+            }
+        }, 500);
+
+    } catch (error) {
+        Logger.error('Main', 'Критическая ошибка запуска:', error);
+        
+        // Останавливаем эмуляцию прогресса
+        const progressFill = document.querySelector('.progress-fill');
+        if (progressFill) progressFill.style.width = '100%';
+        progressFill.style.backgroundColor = '#ff4444';
+
+        // Показываем ошибку через Guard
+        if (typeof ErrorGuard !== 'undefined') {
+            ErrorGuard.showCriticalError(error);
+        } else {
+            alert('Критическая ошибка: ' + error.message);
         }
-    });
-    
-    // Глобальная обработка ошибок
-    window.addEventListener('error', (event) => {
-        Logger.error('Global', `Глобальная ошибка: ${event.message}`, event.error);
-    });
-    
-    window.addEventListener('unhandledrejection', (event) => {
-        Logger.error('Global', `Необработанное Promise отклонение: ${event.reason}`);
-    });
+    }
 });
 
-// Service Worker регистрация для PWA (если доступен)
-if ('serviceWorker' in navigator) {
-    window.addEventListener('load', () => {
-        navigator.serviceWorker.register('/sw.js').then((registration) => {
-            Logger.info('Main', 'Service Worker зарегистрирован:', registration.scope);
-        }).catch((error) => {
-            Logger.debug('Main', 'Service Worker не поддерживается или ошибка регистрации');
-        });
-    });
-}
+// Обработка видимости вкладки (пауза при сворачивании)
+document.addEventListener('visibilitychange', () => {
+    if (document.hidden) {
+        Logger.info('Main', 'Вкладка скрыта, игра на паузе');
+        if (window.gameInstance) window.gameInstance.stop();
+    } else {
+        Logger.info('Main', 'Вкладка активна, возобновление');
+        if (window.gameInstance) window.gameInstance.start();
+    }
+});
