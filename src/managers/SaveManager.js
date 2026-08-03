@@ -1,35 +1,25 @@
 /**
- * Класс SaveManager
- * Обеспечивает надежное сохранение, загрузку и синхронизацию данных.
- * Поддерживает IndexedDB, LocalStorage и Cloud.
+ * Класс SaveManager - Обновлённый
+ * Интеграция с SaveVersionManager для миграции сохранений
+ * Валидация, backup и защита от повреждённых данных
  */
 class SaveManager {
     constructor() {
         this.saveKey = GameConfig.SAVE.LOCAL_STORAGE_KEY;
         this.dbName = 'BrainrotFactoryDB';
         this.storeName = 'saves';
-        
-        // Реестр модулей, которые требуют сохранения
         this.subsystems = new Map();
-        
         this.lastSaveTime = Date.now();
         this.autoSaveInterval = GameConfig.SAVE.SAVE_INTERVAL_MS;
-        
-        // Привязываем контекст
         this.autoSave = this.autoSave.bind(this);
         
-        // Запускаем автосохранение
-        setInterval(this.autoSave, this.autoSaveInterval);
+        // Инициализация менеджера версий
+        this.versionManager = new SaveVersionManager();
         
-        // Сохранение при закрытии вкладки
+        setInterval(this.autoSave, this.autoSaveInterval);
         window.addEventListener('beforeunload', () => this.forceSave());
     }
 
-    /**
-     * Регистрация подсистемы для участия в цикле сохранения
-     * @param {string} key Уникальный ключ подсистемы (например, 'economy')
-     * @param {Object} instance Экземпляр менеджера (должен иметь getSaveData() и loadSaveData(data))
-     */
     registerSubsystem(key, instance) {
         if (typeof instance.getSaveData !== 'function' || typeof instance.loadSaveData !== 'function') {
             Logger.error('SaveManager', `Модуль ${key} не реализует интерфейс сохранения!`);
@@ -38,23 +28,14 @@ class SaveManager {
         this.subsystems.set(key, instance);
     }
 
-    /**
-     * Инициализирует IndexedDB
-     * @returns {Promise<IDBDatabase>}
-     */
     initIndexedDB() {
         return new Promise((resolve, reject) => {
             const request = indexedDB.open(this.dbName, 1);
-            
             request.onerror = (event) => {
                 Logger.warn('SaveManager', 'Ошибка IndexedDB, будет использован LocalStorage');
                 reject(event);
             };
-            
-            request.onsuccess = (event) => {
-                resolve(event.target.result);
-            };
-            
+            request.onsuccess = (event) => resolve(event.target.result);
             request.onupgradeneeded = (event) => {
                 const db = event.target.result;
                 if (!db.objectStoreNames.contains(this.storeName)) {
@@ -64,12 +45,10 @@ class SaveManager {
         });
     }
 
-    /**
-     * Сбор данных со всех подсистем
-     */
     collectSaveData() {
         const fullSaveData = {
-            version: '1.0.0',
+            version: GameConfig.GAME.VERSION,
+            versionNumber: this.versionManager.getCurrentVersion(),
             timestamp: Date.now()
         };
         
@@ -84,12 +63,23 @@ class SaveManager {
         return fullSaveData;
     }
 
-    /**
-     * Распределение загруженных данных по подсистемам
-     * @param {Object} data Полный объект сохранения
-     */
     distributeSaveData(data) {
         if (!data) return;
+        
+        // Миграция данных если версия устарела
+        const currentVersion = this.versionManager.getCurrentVersion();
+        const saveVersion = data.versionNumber || 0;
+        
+        if (saveVersion < currentVersion) {
+            Logger.info('SaveManager', `Миграция сохранения с версии ${saveVersion} до ${currentVersion}`);
+            data = this.versionManager.migrate(data, saveVersion, currentVersion);
+        }
+        
+        // Валидация данных
+        if (!this.versionManager.validateSaveData(data)) {
+            Logger.warn('SaveManager', 'Сохранение не прошло валидацию, используются дефолтные значения');
+            data = this.versionManager.createDefaultSave();
+        }
         
         for (const [key, system] of this.subsystems.entries()) {
             try {
@@ -102,19 +92,17 @@ class SaveManager {
         }
     }
 
-    /**
-     * Основной метод загрузки. Пытается загрузить из облака, затем из IDB, затем из LocalStorage.
-     */
     async loadGame() {
         Logger.info('SaveManager', 'Начало загрузки сохранений...');
         let saveData = null;
+        let backupUsed = false;
 
         // 1. Попытка загрузить из облака Яндекса
         if (GameConfig.SAVE.CLOUD_SAVE_ENABLED) {
             saveData = await yandexSDK.loadCloudData();
         }
 
-        // 2. Если облако пустое или недоступно, ищем локально в IndexedDB
+        // 2. Если облако пустое, ищем в IndexedDB
         if (!saveData) {
             try {
                 const db = await this.initIndexedDB();
@@ -126,7 +114,7 @@ class SaveManager {
                     request.onerror = () => resolve(null);
                 });
             } catch (error) {
-                Logger.info('SaveManager', 'Переход на fallback LocalStorage для загрузки');
+                Logger.info('SaveManager', 'Переход на fallback LocalStorage');
             }
         }
 
@@ -138,6 +126,21 @@ class SaveManager {
                     saveData = JSON.parse(localData);
                 } catch (e) {
                     Logger.error('SaveManager', 'Сохранение в LocalStorage повреждено!');
+                    backupUsed = true;
+                }
+            }
+        }
+        
+        // 4. Если данные повреждены, пробуем загрузить backup
+        if (backupUsed || !saveData) {
+            const backupKey = this.saveKey + '_backup';
+            const backupData = localStorage.getItem(backupKey);
+            if (backupData) {
+                try {
+                    saveData = JSON.parse(backupData);
+                    Logger.info('SaveManager', 'Загружено резервное сохранение');
+                } catch (e) {
+                    Logger.warn('SaveManager', 'Резервное сохранение также повреждено');
                 }
             }
         }
@@ -151,30 +154,38 @@ class SaveManager {
         }
     }
 
-    /**
-     * Сохранение игры
-     */
     async saveGame() {
         const data = this.collectSaveData();
         
-        // 1. Сохранение в LocalStorage (Синхронно, максимально быстро)
+        // Создаём backup перед сохранением
+        const backupKey = this.saveKey + '_backup';
+        const existingData = localStorage.getItem(this.saveKey);
+        if (existingData) {
+            try {
+                localStorage.setItem(backupKey, existingData);
+            } catch (e) {
+                Logger.warn('SaveManager', 'Не удалось создать backup');
+            }
+        }
+        
+        // 1. Сохранение в LocalStorage
         try {
             localStorage.setItem(this.saveKey, JSON.stringify(data));
         } catch (e) {
             Logger.warn('SaveManager', 'Не удалось сохранить в LocalStorage', e);
         }
 
-        // 2. Сохранение в IndexedDB (Асинхронно)
+        // 2. Сохранение в IndexedDB
         try {
             const db = await this.initIndexedDB();
             const transaction = db.transaction([this.storeName], 'readwrite');
             const store = transaction.objectStore(this.storeName);
             store.put(data, this.saveKey);
         } catch (e) {
-            // Игнорируем ошибки IDB, так как LocalStorage уже сохранил
+            // Игнорируем ошибки IDB
         }
 
-        // 3. Сохранение в облако (Если доступно)
+        // 3. Сохранение в облако
         if (GameConfig.SAVE.CLOUD_SAVE_ENABLED) {
             await yandexSDK.saveCloudData(data);
         }
@@ -183,28 +194,18 @@ class SaveManager {
         Logger.debug('SaveManager', 'Игра успешно сохранена');
     }
 
-    /**
-     * Цикл автосохранения
-     */
     autoSave() {
-        // Не сохраняем, если игра не загружена или находится в фоне слишком долго
         this.saveGame();
     }
 
-    /**
-     * Экстренное сохранение при закрытии
-     */
     forceSave() {
         const data = this.collectSaveData();
         localStorage.setItem(this.saveKey, JSON.stringify(data));
-        // Облако не вызываем, так как вкладка закрывается, асинхронные запросы могут быть отменены браузером
     }
 
-    /**
-     * Полный сброс прогресса (Soft Reset / Hard Reset)
-     */
     async wipeData() {
         localStorage.removeItem(this.saveKey);
+        localStorage.removeItem(this.saveKey + '_backup');
         
         try {
             const db = await this.initIndexedDB();
@@ -214,10 +215,47 @@ class SaveManager {
         } catch (e) {}
 
         if (GameConfig.SAVE.CLOUD_SAVE_ENABLED) {
-            await yandexSDK.saveCloudData({}); // Перезаписываем пустым объектом
+            await yandexSDK.saveCloudData({});
         }
         
         Logger.info('SaveManager', 'Все сохранения удалены');
-        window.location.reload(); // Перезапуск игры
+        window.location.reload();
+    }
+    
+    /**
+     * Экспорт сохранения в файл
+     */
+    exportSave() {
+        const data = this.collectSaveData();
+        const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `brainrot_factory_save_${Date.now()}.json`;
+        a.click();
+        URL.revokeObjectURL(url);
+        Logger.info('SaveManager', 'Сохранение экспортировано');
+    }
+    
+    /**
+     * Импорт сохранения из файла
+     */
+    importSave(file) {
+        const reader = new FileReader();
+        reader.onload = async (e) => {
+            try {
+                const data = JSON.parse(e.target.result);
+                if (this.versionManager.validateSaveData(data)) {
+                    localStorage.setItem(this.saveKey, JSON.stringify(data));
+                    Logger.info('SaveManager', 'Сохранение импортировано');
+                    window.location.reload();
+                } else {
+                    Logger.error('SaveManager', 'Невалидное сохранение');
+                }
+            } catch (error) {
+                Logger.error('SaveManager', 'Ошибка импорта сохранения', error);
+            }
+        };
+        reader.readAsText(file);
     }
 }
