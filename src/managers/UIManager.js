@@ -218,14 +218,15 @@ class UIManager {
                 <button class="ui-interactive" style="background: #ff0055; border: none; color: #fff; padding: 12px 30px; border-radius: 30px; font-size: 18px; margin-top: 10px; cursor: pointer;" onclick="window.gameInstance.managers.ui.closePopup('offline-popup')">Супер!</button>
             </div>
         `;
-        this.showPopup('Добро пожаловать!', content, 'offline-popup');
+        this.showCustomPopup('Добро пожаловать!', content, 'offline-popup');
     }
 
-    // Переопределим showPopup с возможностью указать id
-    showPopup(title, htmlContent, customId = null) {
-        const popupId = customId || `popup_${Date.now()}`;
-    }
-    
+    /**
+     * Показать кастомный попап с указанным ID
+     * @param {string} title
+     * @param {string} htmlContent
+     * @param {string} popupId
+     */
     showCustomPopup(title, htmlContent, popupId) {
         const popupHTML = `
             <div id="${popupId}" style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.8); display: flex; justify-content: center; align-items: center; z-index: 1000; opacity: 0; transition: opacity 0.25s ease-out; pointer-events: auto;">
