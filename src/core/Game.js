@@ -36,7 +36,8 @@ class Game {
 
     async _createManagers() {
         this.updateLoadingProgress(30, 'Инициализация подсистем...');
-        this.registry = new ManagerRegistry();
+        // Менеджеры уже зарегистрированы в ManagersInitializer.init()
+        this.registry = window.ManagerRegistry;
         await this.registry.initializeAll();
         window.gameRegistry = this.registry;
         Logger.info('Game', `Инициализировано ${this.registry.count()} менеджеров`);
@@ -44,11 +45,10 @@ class Game {
 
     async _loadResources() {
         this.updateLoadingProgress(60, 'Загрузка ассетов...');
-        const resourcesManager = this.registry.get('resources');
-        await resourcesManager.loadInitialAssets((progress) => {
-            const mappedProgress = 60 + (progress * 0.3);
-            this.updateLoadingProgress(mappedProgress, 'Загрузка ассетов...');
-        });
+        const assetManager = this.registry.get('asset');
+        if (assetManager && typeof assetManager.loadAll === 'function') {
+            await assetManager.loadAll();
+        }
         Logger.info('Game', 'Ресурсы загружены');
     }
 
