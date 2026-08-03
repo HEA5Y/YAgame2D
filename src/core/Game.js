@@ -42,8 +42,19 @@ class Game {
         this.managers.offline = new OfflineManager(
             this.managers.time,
             this.managers.economy,
-            this.managers.factory // пока null, позже будет FactoryManager
+            null // FactoryManager будет создан ниже
         );
+        
+        // Создаем FactoryManager после EconomyManager
+        this.managers.factory = new FactoryManager(this.managers.economy, this.managers.save);
+        
+        // Обновляем ссылку на FactoryManager в OfflineManager
+        this.managers.offline.factoryManager = this.managers.factory;
+        
+        // Создаем TweenManager и ParticleManager
+        this.managers.tween = new TweenManager();
+        this.managers.pool.createPool('floating_text', () => new FloatingText(), 20);
+        this.managers.particle = new ParticleManager(this.managers.pool);
 
         this.updateLoadingProgress(60, 'Загрузка ассетов...');
 
@@ -142,11 +153,33 @@ class Game {
         if (this.managers.time) this.managers.time.update(dt);
         if (this.managers.scene) this.managers.scene.update(dt);
         if (this.managers.pool) this.managers.pool.update(dt);
+        if (this.managers.tween) this.managers.tween.update(dt);
+        if (this.managers.factory) this.managers.factory.update(dt);
     }
 
     render() {
         this.ctx.fillStyle = '#0d0f12';
         this.ctx.fillRect(0, 0, GameConfig.ENGINE.CANVAS_LOGICAL_WIDTH, GameConfig.ENGINE.CANVAS_LOGICAL_HEIGHT);
         if (this.managers.scene) this.managers.scene.render(this.ctx);
+        if (this.managers.particle) this.managers.particle.pool.render(this.ctx);
+    }
+    
+    /**
+     * Обработка кликов по canvas
+     */
+    handleCanvasClick(event) {
+        const rect = this.canvas.getBoundingClientRect();
+        const scaleX = this.canvas.width / rect.width;
+        const scaleY = this.canvas.height / rect.height;
+        
+        const clickX = (event.clientX - rect.left) * scaleX / (window.devicePixelRatio || 1);
+        const clickY = (event.clientY - rect.top) * scaleY / (window.devicePixelRatio || 1);
+        
+        // Передаем клик в FactoryManager для обработки линий
+        if (this.managers.factory && this.managers.factory.handleClick(clickX, clickY)) {
+            return true;
+        }
+        
+        return false;
     }
 }
