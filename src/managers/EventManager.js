@@ -9,6 +9,8 @@ class EventManager {
         this.eventPool = EventData; // массив всех возможных событий
         this.cooldown = 0;
         this.checkInterval = 30000; // каждые 30 секунд
+        this.eventTimers = new Map(); // ИСПРАВЛЕНО: храним ID таймеров для очистки
+        
         this.subscribeEvents();
 
         setInterval(() => this.tryTriggerEvent(), this.checkInterval);
@@ -57,10 +59,16 @@ class EventManager {
         this.activeEvents.push(activeEvent);
 
         // Применяем эффект
-        const econ = window.gameInstance.managers.economy;
-        const factory = window.gameInstance.managers.factory; // может быть undefined пока
+        // ИСПРАВЛЕНО: получаем менеджеры из реестра
+        const econ = (window.ManagerRegistry) ? window.ManagerRegistry.get('economy') : null;
+        const factory = (window.ManagerRegistry) ? window.ManagerRegistry.get('factory') : null;
+        
         if (event.effect) {
-            event.effect(econ, factory);
+            try {
+                event.effect(econ, factory);
+            } catch (error) {
+                Logger.error('EventManager', `Ошибка при активации события ${event.name}:`, error);
+            }
         }
 
         // Показываем уведомление
@@ -72,20 +80,34 @@ class EventManager {
         Logger.info('EventManager', `Активировано событие: ${event.name}`);
 
         // Устанавливаем таймер на деактивацию
-        setTimeout(() => {
+        const timerId = setTimeout(() => {
             this.deactivateEvent(activeEvent);
         }, event.duration * 1000);
+        
+        // ИСПРАВЛЕНО: сохраняем ID таймера для возможной отмены
+        this.eventTimers.set(activeEvent.id, timerId);
     }
 
     deactivateEvent(activeEvent) {
+        // ИСПРАВЛЕНО: очищаем таймер если он ещё активен
+        const timerId = this.eventTimers.get(activeEvent.id);
+        if (timerId) {
+            clearTimeout(timerId);
+            this.eventTimers.delete(activeEvent.id);
+        }
+        
         // Удаляем из активных
         const index = this.activeEvents.indexOf(activeEvent);
         if (index !== -1) this.activeEvents.splice(index, 1);
 
         // Вызываем деактивацию
         if (activeEvent.deactivate) {
-            const econ = window.gameInstance.managers.economy;
-            activeEvent.deactivate(econ);
+            const econ = (window.ManagerRegistry) ? window.ManagerRegistry.get('economy') : null;
+            try {
+                activeEvent.deactivate(econ);
+            } catch (error) {
+                Logger.error('EventManager', `Ошибка при деактивации события ${activeEvent.name}:`, error);
+            }
         }
 
         gameEventBus.emit('show_notification', {

@@ -9,44 +9,53 @@ class UpgradeManager {
      * @param {EconomyManager} economyManager Менеджер экономики для работы с транзакциями
      */
     constructor(saveManager, economyManager) {
-        this.upgrades = new Map(); //[cite: 45]
-        this.purchased = new Map(); //[cite: 45]
-        this.saveManager = saveManager; //[cite: 45]
+        this.upgrades = new Map();
+        this.purchased = new Map();
+        this.saveManager = saveManager;
         this.economyManager = economyManager; 
 
-        if (saveManager) saveManager.registerSubsystem('upgrades', this); //[cite: 45]
-        this.initUpgrades(); //[cite: 45]
-        this.applyAllEffects(); //[cite: 45]
-        this.subscribeEvents(); //[cite: 45]
+        if (saveManager) saveManager.registerSubsystem('upgrades', this);
+        this.initUpgrades();
+        this.applyAllEffects();
+        this.subscribeEvents();
     }
 
     initUpgrades() {
         // Загрузка сырых данных шаблонов улучшений
         UpgradeData.forEach(tpl => {
-            const upgrade = new Upgrade(tpl); //[cite: 45]
-            this.upgrades.set(upgrade.id, upgrade); //[cite: 45]
-            this.purchased.set(upgrade.id, 0); //[cite: 45]
+            const upgrade = new Upgrade(tpl);
+            this.upgrades.set(upgrade.id, upgrade);
+            this.purchased.set(upgrade.id, 0);
         });
-        Logger.info('UpgradeManager', `Загружено ${this.upgrades.size} улучшений`); //[cite: 45]
+        Logger.info('UpgradeManager', `Загружено ${this.upgrades.size} улучшений`);
     }
 
     subscribeEvents() {
-        gameEventBus.on('upgrade_purchased', (data) => {
-            const upgrade = this.upgrades.get(data.id); //[cite: 45]
+        // ИСПРАВЛЕНО: используем правильное имя события из GameConfig
+        gameEventBus.on(GameConfig.EVENTS.UPGRADE_BOUGHT, (data) => {
+            const upgrade = this.upgrades.get(data.id);
             if (upgrade) {
-                upgrade.applyEffect(data.newLevel, this.economyManager); //[cite: 45]
+                upgrade.applyEffect(data.newLevel, this.economyManager);
             }
         });
     }
 
     /**
      * Применяет эффекты всех купленных улучшений
+     * ИСПРАВЛЕНО: сначала сбрасываем множители, потом применяем
      */
     applyAllEffects() {
-        for (const [id, level] of this.purchased) { //[cite: 45]
-            if (level > 0) { //[cite: 45]
-                const upgrade = this.upgrades.get(id); //[cite: 45]
-                if (upgrade) upgrade.applyEffect(level, this.economyManager); //[cite: 45]
+        if (!this.economyManager) return;
+
+        // Сброс глобальных множителей к базовым значениям
+        this.economyManager.setGlobalMultiplier('income', 1.0);
+        this.economyManager.setGlobalMultiplier('costDiscount', 1.0);
+
+        // Применяем эффекты всех купленных улучшений
+        for (const [id, level] of this.purchased) {
+            if (level > 0) {
+                const upgrade = this.upgrades.get(id);
+                if (upgrade) upgrade.applyEffect(level, this.economyManager);
             }
         }
     }
@@ -55,14 +64,14 @@ class UpgradeManager {
      * Получить объект улучшения
      */
     getUpgrade(id) {
-        return this.upgrades.get(id); //[cite: 45]
+        return this.upgrades.get(id);
     }
 
     /**
      * Получить текущий уровень улучшения
      */
     getLevel(id) {
-        return this.purchased.get(id) || 0; //[cite: 45]
+        return this.purchased.get(id) || 0;
     }
 
     /**
@@ -72,18 +81,18 @@ class UpgradeManager {
      * @returns {BigNumber}
      */
     getCost(id, levels = 1) {
-        const upgrade = this.upgrades.get(id); //[cite: 45]
-        if (!upgrade) return new BigNumber(0); //[cite: 45]
-        const current = this.getLevel(id); //[cite: 45]
+        const upgrade = this.upgrades.get(id);
+        if (!upgrade) return new BigNumber(0);
+        const current = this.getLevel(id);
         
-        let cost = new BigNumber(upgrade.baseCost); //[cite: 45]
-        let total = new BigNumber(0); //[cite: 45]
+        let cost = new BigNumber(upgrade.baseCost);
+        let total = new BigNumber(0);
         
         for (let i = 0; i < levels; i++) {
-            const levelCost = cost.multiply(Math.pow(upgrade.costMultiplier, current + i)); //[cite: 45]
-            total = total.add(levelCost); //[cite: 45]
+            const levelCost = cost.multiply(Math.pow(upgrade.costMultiplier, current + i));
+            total = total.add(levelCost);
         }
-        return total; //[cite: 45]
+        return total;
     }
 
     /**
@@ -93,38 +102,39 @@ class UpgradeManager {
      * @returns {boolean}
      */
     purchase(id, levels = 1) {
-        const upgrade = this.upgrades.get(id); //[cite: 45]
+        const upgrade = this.upgrades.get(id);
         if (!upgrade) {
-            Logger.warn('UpgradeManager', `Улучшение ${id} не найдено`); //[cite: 45]
+            Logger.warn('UpgradeManager', `Улучшение ${id} не найдено`);
             return false;
         }
         
-        const current = this.getLevel(id); //[cite: 45]
+        const current = this.getLevel(id);
         if (current >= upgrade.maxLevel) {
-            Logger.debug('UpgradeManager', `Улучшение ${id} уже максимального уровня`); //[cite: 45]
+            Logger.debug('UpgradeManager', `Улучшение ${id} уже максимального уровня`);
             return false;
         }
         
-        const cost = this.getCost(id, levels); //[cite: 45]
+        const cost = this.getCost(id, levels);
         
         // Проверка баланса через инжектированный менеджер экономики
-        if (!this.economyManager.hasEnough(GameConfig.CURRENCY.COINS, cost)) { //[cite: 45]
-            Logger.debug('UpgradeManager', `Не хватает монет для ${id}`); //[cite: 45]
+        if (!this.economyManager.hasEnough(GameConfig.CURRENCY.COINS, cost)) {
+            Logger.debug('UpgradeManager', `Не хватает монет для ${id}`);
             return false;
         }
         
-        if (!this.economyManager.spendCurrency(GameConfig.CURRENCY.COINS, cost, `upgrade_${id}`)) { //[cite: 45]
+        if (!this.economyManager.spendCurrency(GameConfig.CURRENCY.COINS, cost, `upgrade_${id}`)) {
             return false;
         }
 
-        const newLevel = Math.min(current + levels, upgrade.maxLevel); //[cite: 45]
-        this.purchased.set(id, newLevel); //[cite: 45]
+        const newLevel = Math.min(current + levels, upgrade.maxLevel);
+        this.purchased.set(id, newLevel);
         
         // Применяем изменения
-        upgrade.applyEffect(newLevel, this.economyManager); //[cite: 45]
+        upgrade.applyEffect(newLevel, this.economyManager);
         
-        gameEventBus.emit('upgrade_purchased', { id, newLevel, cost }); //[cite: 45]
-        Logger.info('UpgradeManager', `Куплено улучшение ${id} до уровня ${newLevel}`); //[cite: 45]
+        // ИСПРАВЛЕНО: эмитим правильное событие
+        gameEventBus.emit(GameConfig.EVENTS.UPGRADE_BOUGHT, { id, newLevel, cost });
+        Logger.info('UpgradeManager', `Куплено улучшение ${id} до уровня ${newLevel}`);
         return true;
     }
 
@@ -132,34 +142,35 @@ class UpgradeManager {
      * Получить все улучшения по категории
      */
     getByCategory(category) {
-        const result = []; //[cite: 45]
-        for (const [id, upgrade] of this.upgrades) { //[cite: 45]
-            if (upgrade.category === category) { //[cite: 45]
-                result.push(upgrade); //[cite: 45]
+        const result = [];
+        for (const [id, upgrade] of this.upgrades) {
+            if (upgrade.category === category) {
+                result.push(upgrade);
             }
         }
-        return result; //[cite: 45]
+        return result;
     }
 
     // --- Логика Сохранения / Загрузки ---
 
     getSaveData() {
-        const data = {}; //[cite: 45]
-        for (const [id, level] of this.purchased) { //[cite: 45]
-            if (level > 0) data[id] = level; //[cite: 45]
+        const data = {};
+        for (const [id, level] of this.purchased) {
+            if (level > 0) data[id] = level;
         }
-        return data; //[cite: 45]
+        return data;
     }
 
     loadSaveData(data) {
-        if (!data) return; //[cite: 45]
-        for (const [id, level] of Object.entries(data)) { //[cite: 45]
-            if (this.purchased.has(id)) { //[cite: 45]
-                this.purchased.set(id, level); //[cite: 45]
+        if (!data) return;
+        for (const [id, level] of Object.entries(data)) {
+            if (this.purchased.has(id)) {
+                this.purchased.set(id, level);
             }
         }
-        this.applyAllEffects(); //[cite: 45]
-        Logger.info('UpgradeManager', 'Данные улучшений загружены'); //[cite: 45]
+        // ИСПРАВЛЕНО: пересчитываем с нуля, не накапливаем
+        this.applyAllEffects();
+        Logger.info('UpgradeManager', 'Данные улучшений загружены');
     }
 }
 
@@ -168,15 +179,15 @@ class UpgradeManager {
  */
 class Upgrade {
     constructor(tpl) {
-        this.id = tpl.id; //[cite: 45]
-        this.name = tpl.name; //[cite: 45]
-        this.description = tpl.description; //[cite: 45]
-        this.category = tpl.category; //[cite: 45]
-        this.baseCost = tpl.baseCost; //[cite: 45]
-        this.maxLevel = tpl.maxLevel || 50; //[cite: 45]
-        this.costMultiplier = tpl.costMultiplier || 1.15; //[cite: 45]
-        this.effect = tpl.effect; //[cite: 45]
-        this.icon = tpl.icon || ''; //[cite: 45]
+        this.id = tpl.id;
+        this.name = tpl.name;
+        this.description = tpl.description;
+        this.category = tpl.category;
+        this.baseCost = tpl.baseCost;
+        this.maxLevel = tpl.maxLevel || 50;
+        this.costMultiplier = tpl.costMultiplier || 1.15;
+        this.effect = tpl.effect;
+        this.icon = tpl.icon || '';
     }
 
     /**
@@ -185,32 +196,35 @@ class Upgrade {
      * @param {EconomyManager} economyManager
      */
     applyEffect(level, economyManager) {
-        if (level <= 0 || !economyManager) return; //[cite: 45]
-        const bonus = this.effect(level); //[cite: 45]
+        if (level <= 0 || !economyManager) return;
+        const bonus = this.effect(level);
 
         if (bonus.speedMultiplier) {
-            gameEventBus.emit('modifier_speed', bonus.speedMultiplier); //[cite: 45]
+            gameEventBus.emit('modifier_speed', bonus.speedMultiplier);
         }
         if (bonus.incomeMultiplier) {
-            economyManager.setGlobalMultiplier('income', economyManager.globalMultipliers.income * bonus.incomeMultiplier); //[cite: 45]
+            // ИСПРАВЛЕНО: используем setGlobalMultiplier вместо прямого доступа
+            const currentIncome = economyManager.getIncomeMultiplier();
+            economyManager.setGlobalMultiplier('income', currentIncome * bonus.incomeMultiplier);
         }
         if (bonus.costDiscount) {
-            economyManager.setGlobalMultiplier('costDiscount', economyManager.globalMultipliers.costDiscount * bonus.costDiscount); //[cite: 45]
+            const currentDiscount = economyManager.globalMultipliers.costDiscount;
+            economyManager.setGlobalMultiplier('costDiscount', currentDiscount * bonus.costDiscount);
         }
         if (bonus.energyMultiplier) {
-            gameEventBus.emit('modifier_energy', bonus.energyMultiplier); //[cite: 45]
+            gameEventBus.emit('modifier_energy', bonus.energyMultiplier);
         }
         if (bonus.rarityBoost) {
-            // Зарезервировано под CollectionManager[cite: 45]
+            // Зарезервировано под CollectionManager
         }
         if (bonus.luckBoost) {
-            // Зарезервировано под EventManager[cite: 45]
+            // Зарезервировано под EventManager
         }
         if (bonus.efficiencyMultiplier) {
-            // Зарезервировано под FactoryManager[cite: 45]
+            // Зарезервировано под FactoryManager
         }
         if (bonus.automationLevel) {
-            // Зарезервировано под FactoryManager[cite: 45]
+            // Зарезервировано под FactoryManager
         }
     }
 }

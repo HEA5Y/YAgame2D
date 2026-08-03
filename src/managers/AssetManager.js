@@ -38,9 +38,9 @@ class AssetManager {
             
             console.log('[AssetManager] Все ресурсы загружены и сгенерированы.');
             
-            // СообщаемEventManager о завершении
-            if (window.EventBus) {
-                EventBus.emit('assets:loaded');
+            // Сообщаем о завершении
+            if (typeof gameEventBus !== 'undefined') {
+                gameEventBus.emit('assets:loaded');
             }
             
             return true;
@@ -66,26 +66,44 @@ class AssetManager {
             // Очистка
             ctx.clearRect(0, 0, size, size);
             
+            // ИСПРАВЛЕНО: проверяем наличие colors, используем fallback
+            const colors = era.colors || ['#2a3548', '#1a1f2b'];
+            
             // Фон эпохи
             const gradient = ctx.createLinearGradient(0, 0, size, size);
-            gradient.addColorStop(0, era.colors[0]);
-            gradient.addColorStop(1, era.colors[1]);
+            gradient.addColorStop(0, colors[0]);
+            gradient.addColorStop(1, colors[1] || colors[0]);
             ctx.fillStyle = gradient;
             
-            // Рисуем форму в зависимости от эпохи
+            // ИСПРАВЛЕНО: рисуем форму без roundRect (совместимость со старыми браузерами)
             ctx.beginPath();
             if (index < 2) {
-                // Ранние эпохи - простые формы
-                ctx.roundRect(10, 10, size - 20, size - 20, 10);
+                // Ранние эпохи - прямоугольник со скруглением через arcTo
+                const r = 10;
+                const w = size - 20;
+                const h = size - 20;
+                const x = 10;
+                const y = 10;
+                
+                ctx.moveTo(x + r, y);
+                ctx.lineTo(x + w - r, y);
+                ctx.arcTo(x + w, y, x + w, y + r, r);
+                ctx.lineTo(x + w, y + h - r);
+                ctx.arcTo(x + w, y + h, x + w - r, y + h, r);
+                ctx.lineTo(x + r, y + h);
+                ctx.arcTo(x, y + h, x, y + h - r, r);
+                ctx.lineTo(x, y + r);
+                ctx.arcTo(x, y, x + r, y, r);
+                ctx.closePath();
             } else if (index < 5) {
-                // Средние - сложные
+                // Средние - ромб
                 ctx.moveTo(size/2, 10);
                 ctx.lineTo(size - 10, size/2);
                 ctx.lineTo(size/2, size - 10);
                 ctx.lineTo(10, size/2);
                 ctx.closePath();
             } else {
-                // Поздние - футуристичные
+                // Поздние - футуристичные (круг)
                 ctx.arc(size/2, size/2, size/2 - 5, 0, Math.PI * 2);
             }
             
@@ -98,7 +116,7 @@ class AssetManager {
                 ctx.fillRect(20 + i * 25, 60, 15, 15);
             }
             
-            // Сохраняем как ImageBitmap или DataURL
+            // Сохраняем как DataURL
             this.sprites[key] = canvas.toDataURL();
         });
         
@@ -144,7 +162,7 @@ class AssetManager {
      */
     _generateUIElements() {
         // Кнопки, фоны панелей и т.д. можно генерировать здесь
-        // Пока используем CSS стили, но预留 место для сложных элементов
+        // Пока используем CSS стили, но место для сложных элементов
         this.sprites['ui_panel'] = null; 
     }
 

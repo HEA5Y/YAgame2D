@@ -85,14 +85,32 @@ class EconomyManager {
 
         this.wallets[currencyId] = this.wallets[currencyId].subtract(valueToSpend);
         
+        // ИСПРАВЛЕНО: корректное создание отрицательного числа
+        const negativeDelta = valueToSpend.multiply(-1);
+        
         gameEventBus.emit(GameConfig.EVENTS.CURRENCY_CHANGED, {
             currency: currencyId,
             newValue: this.wallets[currencyId].clone(),
-            delta: new BigNumber(valueToSpend.mantissa * -1), // Отрицательная дельта
+            delta: negativeDelta,
             source: source
         });
 
         return true;
+    }
+
+    /**
+     * Безопасный сброс валюты (для престижа)
+     * @param {string} currencyId 
+     * @param {BigNumber|number} newValue 
+     */
+    resetCurrency(currencyId, newValue) {
+        this.wallets[currencyId] = new BigNumber(newValue);
+        gameEventBus.emit(GameConfig.EVENTS.CURRENCY_CHANGED, {
+            currency: currencyId,
+            newValue: this.wallets[currencyId].clone(),
+            delta: new BigNumber(0),
+            source: 'prestige_reset'
+        });
     }
 
     // --- Математика стоимости и уровней ---
@@ -163,18 +181,22 @@ class EconomyManager {
         if (data.coins) {
             this.wallets.coins.mantissa = data.coins.m;
             this.wallets.coins.exponent = data.coins.e;
+            this.wallets.coins.normalize();
         }
         if (data.gems) {
             this.wallets.gems.mantissa = data.gems.m;
             this.wallets.gems.exponent = data.gems.e;
+            this.wallets.gems.normalize();
         }
         if (data.brain_cells) {
             this.wallets.brain_cells.mantissa = data.brain_cells.m;
             this.wallets.brain_cells.exponent = data.brain_cells.e;
+            this.wallets.brain_cells.normalize();
         }
         if (data.research) {
             this.wallets.research.mantissa = data.research.m;
             this.wallets.research.exponent = data.research.e;
+            this.wallets.research.normalize();
         }
     }
 }

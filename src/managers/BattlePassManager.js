@@ -41,22 +41,22 @@ class BattlePassManager {
         };
 
         this.listeners = [];
+        
+        // Получаем economy из реестра
+        this.economyManager = (window.ManagerRegistry) ? window.ManagerRegistry.get('economy') : null;
     }
 
     init() {
-        const saved = SaveManager.load('battlepass');
-        if (saved) {
-            Object.assign(this, saved);
-        }
-        
+        this.loadData();
+
         // Проверка окончания сезона
         if (Date.now() - this.seasonStart > this.seasonDuration) {
             this.endSeason();
         }
 
-        EventBus.on('xp_gain', this.addXP.bind(this));
-        EventBus.on('battlepass_claim', this.claimReward.bind(this));
-        EventBus.on('battlepass_premium', this.activatePremium.bind(this));
+        gameEventBus.on('xp_gain', this.addXP.bind(this));
+        gameEventBus.on('battlepass_claim', this.claimReward.bind(this));
+        gameEventBus.on('battlepass_premium', this.activatePremium.bind(this));
     }
 
     addListener(callback) {
@@ -67,6 +67,40 @@ class BattlePassManager {
         this.listeners.forEach(cb => cb(this));
     }
 
+    loadData() {
+        try {
+            const saved = localStorage.getItem('bf_battlepass');
+            if (saved) {
+                const data = JSON.parse(saved);
+                this.currentSeason = data.currentSeason || 1;
+                this.seasonStart = data.seasonStart || Date.now();
+                this.playerLevel = data.playerLevel || 1;
+                this.playerXP = data.playerXP || 0;
+                this.xpToNextLevel = data.xpToNextLevel || 1000;
+                this.isPremium = data.isPremium || false;
+                this.claimedRewards = data.claimedRewards || [];
+            }
+        } catch (e) {
+            Logger.warn('BattlePassManager', 'Не удалось загрузить данные', e);
+        }
+    }
+
+    saveData() {
+        try {
+            localStorage.setItem('bf_battlepass', JSON.stringify({
+                currentSeason: this.currentSeason,
+                seasonStart: this.seasonStart,
+                playerLevel: this.playerLevel,
+                playerXP: this.playerXP,
+                xpToNextLevel: this.xpToNextLevel,
+                isPremium: this.isPremium,
+                claimedRewards: this.claimedRewards
+            }));
+        } catch (e) {
+            Logger.warn('BattlePassManager', 'Не удалось сохранить данные', e);
+        }
+    }
+
     addXP(amount) {
         this.playerXP += amount;
         
@@ -74,19 +108,10 @@ class BattlePassManager {
             this.playerXP -= this.xpToNextLevel;
             this.playerLevel++;
             this.xpToNextLevel = Math.floor(this.xpToNextLevel * 1.2);
-            EventBus.emit('battlepass_level_up', { level: this.playerLevel });
+            gameEventBus.emit('battlepass_level_up', { level: this.playerLevel });
         }
 
-        SaveManager.save('battlepass', {
-            currentSeason: this.currentSeason,
-            seasonStart: this.seasonStart,
-            playerLevel: this.playerLevel,
-            playerXP: this.playerXP,
-            xpToNextLevel: this.xpToNextLevel,
-            isPremium: this.isPremium,
-            claimedRewards: this.claimedRewards
-        });
-        
+        this.saveData();
         this.notifyListeners();
     }
 
@@ -98,32 +123,27 @@ class BattlePassManager {
         const reward = isPremium ? this.premiumRewards[level] : this.freeRewards[level];
         if (!reward) return false;
 
-        // Выдача награды
-        if (reward.type === 'coins') {
-            ResourceManager.add('coins', reward.amount);
-        } else if (reward.type === 'gems') {
-            ResourceManager.add('gems', reward.amount);
-        } else if (reward.type === 'boost') {
-            // Активация буста
-            EventBus.emit('activate_boost', { type: 'production', multiplier: 2, duration: reward.duration });
+        // Выдача награды через EconomyManager
+        if (this.economyManager) {
+            if (reward.type === 'coins') {
+                this.economyManager.addCurrency(GameConfig.CURRENCY.COINS, reward.amount, 'battlepass');
+            } else if (reward.type === 'gems') {
+                this.economyManager.addCurrency(GameConfig.CURRENCY.GEMS, reward.amount, 'battlepass');
+            }
+        }
+        
+        if (reward.type === 'boost') {
+            gameEventBus.emit('activate_boost', { type: 'production', multiplier: 2, duration: reward.duration });
         } else if (reward.type === 'chest') {
-            EventBus.emit('open_chest', { rarity: reward.rarity });
+            gameEventBus.emit('open_chest', { rarity: reward.rarity });
         } else if (reward.type === 'creature') {
-            EventBus.emit('gacha_pull', { guaranteedRarity: reward.rarity });
+            gameEventBus.emit('gacha_pull', { guaranteedRarity: reward.rarity });
         }
 
         this.claimedRewards.push(key);
-        SaveManager.save('battlepass', {
-            currentSeason: this.currentSeason,
-            seasonStart: this.seasonStart,
-            playerLevel: this.playerLevel,
-            playerXP: this.playerXP,
-            xpToNextLevel: this.xpToNextLevel,
-            isPremium: this.isPremium,
-            claimedRewards: this.claimedRewards
-        });
+        this.saveData();
 
-        EventBus.emit('battlepass_reward_claimed', { level, reward });
+        gameEventBus.emit('battlepass_reward_claimed', { level, reward });
         this.notifyListeners();
         return true;
     }
@@ -131,23 +151,15 @@ class BattlePassManager {
     activatePremium() {
         if (this.isPremium) return;
         this.isPremium = true;
-        SaveManager.save('battlepass', {
-            currentSeason: this.currentSeason,
-            seasonStart: this.seasonStart,
-            playerLevel: this.playerLevel,
-            playerXP: this.playerXP,
-            xpToNextLevel: this.xpToNextLevel,
-            isPremium: this.isPremium,
-            claimedRewards: this.claimedRewards
-        });
-        EventBus.emit('battlepass_premium_activated');
+        this.saveData();
+        gameEventBus.emit('battlepass_premium_activated');
         this.notifyListeners();
     }
 
     endSeason() {
         // Выдача наград за сезон
         const finalLevel = this.playerLevel;
-        EventBus.emit('season_ended', { season: this.currentSeason, level: finalLevel });
+        gameEventBus.emit('season_ended', { season: this.currentSeason, level: finalLevel });
 
         // Сброс сезона
         this.currentSeason++;
@@ -156,17 +168,9 @@ class BattlePassManager {
         this.playerXP = 0;
         this.xpToNextLevel = 1000;
         this.claimedRewards = [];
-        // isPremium не сбрасываем, если игрок купил навсегда, или сбрасываем если按月
+        // isPremium не сбрасываем, если игрок купил навсегда, или сбрасываем если по подписке
 
-        SaveManager.save('battlepass', {
-            currentSeason: this.currentSeason,
-            seasonStart: this.seasonStart,
-            playerLevel: this.playerLevel,
-            playerXP: this.playerXP,
-            xpToNextLevel: this.xpToNextLevel,
-            isPremium: this.isPremium,
-            claimedRewards: this.claimedRewards
-        });
+        this.saveData();
 
         this.notifyListeners();
     }

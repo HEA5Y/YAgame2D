@@ -19,13 +19,23 @@ class OfflineManager {
      * Вызывается при старте игры – обрабатывает оффлайн-доход
      */
     processOfflineIncome() {
-        const seconds = this.timeManager.getOfflineSeconds();
+        // Получаем timeManager из реестра если не передан напрямую
+        const time = this.timeManager || (window.ManagerRegistry ? window.ManagerRegistry.get('time') : null);
+        if (!time) {
+            Logger.warn('OfflineManager', 'TimeManager не доступен');
+            return;
+        }
+
+        const seconds = time.getOfflineSeconds();
         if (seconds <= 0) return;
 
-        // Получаем общее производство в секунду (из FactoryManager или заглушка)
+        // Получаем FactoryManager из реестра если не передан напрямую
+        const factory = this.factoryManager || (window.ManagerRegistry ? window.ManagerRegistry.get('factory') : null);
+        
+        // Получаем общее производство в секунду
         let totalPerSecond = new BigNumber(0);
-        if (this.factoryManager && typeof this.factoryManager.getTotalProductionPerSecond === 'function') {
-            totalPerSecond = this.factoryManager.getTotalProductionPerSecond();
+        if (factory && typeof factory.getTotalProductionPerSecond === 'function') {
+            totalPerSecond = factory.getTotalProductionPerSecond();
         } else {
             // Заглушка: 100 монет в секунду, если нет FactoryManager
             totalPerSecond = new BigNumber(100);
@@ -36,8 +46,15 @@ class OfflineManager {
         const multiplier = GameConfig.ECONOMY.OFFLINE_PRODUCTION_PERCENT;
         const finalIncome = offlineIncome.multiply(multiplier);
 
+        // Получаем EconomyManager из реестра если не передан напрямую
+        const econ = this.economyManager || (window.ManagerRegistry ? window.ManagerRegistry.get('economy') : null);
+        if (!econ) {
+            Logger.warn('OfflineManager', 'EconomyManager не доступен');
+            return;
+        }
+
         // Добавляем игроку
-        this.economyManager.addCurrency(GameConfig.CURRENCY.COINS, finalIncome, 'offline');
+        econ.addCurrency(GameConfig.CURRENCY.COINS, finalIncome, 'offline');
 
         // Показать уведомление
         gameEventBus.emit('offline_income_collected', {
@@ -45,8 +62,8 @@ class OfflineManager {
             seconds: seconds
         });
 
-        // Показать всплывающее окно с оффлайн-доходом (через UIManager)
-        const ui = window.gameInstance.managers.ui;
+        // Показать всплывающее окно с оффлайн-доходом (через UIManager из реестра)
+        const ui = window.ManagerRegistry ? window.ManagerRegistry.get('ui') : null;
         if (ui && typeof ui.showOfflinePopup === 'function') {
             ui.showOfflinePopup(finalIncome, seconds);
         } else {
@@ -57,8 +74,13 @@ class OfflineManager {
             });
         }
 
-        // Сбрасываем оффлайн-время
-        this.timeManager.clearOfflineSeconds();
+        // Сбрасываем оффлайн-время через TimeManager
+        if (typeof time.clearOfflineSeconds === 'function') {
+            time.clearOfflineSeconds();
+        } else {
+            // Fallback если метод недоступен
+            time.offlineSeconds = 0;
+        }
 
         Logger.info('OfflineManager', `Оффлайн-доход: ${finalIncome.format()} монет за ${seconds} сек.`);
     }

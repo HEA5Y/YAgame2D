@@ -43,22 +43,21 @@ class ChestManager {
         };
 
         this.activeChests = []; // { type, unlockTime, claimed }
-        this.chestCooldown = 0; // Время до следующего бесплатного сундука
-        this.freeChestInterval = 10 * 60 * 1000; // 10 минут
+        this.chestCooldown = 0; // Время до следующего бесплатного сундука (в СЕКУНДАХ)
+        this.freeChestInterval = 600; // 10 минут = 600 СЕКУНД (исправлено с мс)
         
         this.listeners = [];
+        
+        // Получаем менеджер экономики из реестра
+        this.economyManager = (window.ManagerRegistry) ? window.ManagerRegistry.get('economy') : null;
     }
 
     init() {
-        const saved = SaveManager.load('chests');
-        if (saved) {
-            this.activeChests = saved.activeChests || [];
-            this.chestCooldown = saved.chestCooldown || 0;
-        }
+        this.loadChestData();
 
-        EventBus.on('open_chest', this.openChest.bind(this));
-        EventBus.on('claim_chest', this.claimChest.bind(this));
-        EventBus.on('instant_open', this.instantOpenChest.bind(this));
+        gameEventBus.on('open_chest', this.openChest.bind(this));
+        gameEventBus.on('claim_chest', this.claimChest.bind(this));
+        gameEventBus.on('instant_open', this.instantOpenChest.bind(this));
     }
 
     addListener(callback) {
@@ -69,13 +68,43 @@ class ChestManager {
         this.listeners.forEach(cb => cb(this));
     }
 
+    /**
+     * Загрузка данных сундуков из localStorage
+     */
+    loadChestData() {
+        try {
+            const saved = localStorage.getItem('bf_chests');
+            if (saved) {
+                const data = JSON.parse(saved);
+                this.activeChests = data.activeChests || [];
+                this.chestCooldown = data.chestCooldown || 0;
+            }
+        } catch (e) {
+            Logger.warn('ChestManager', 'Не удалось загрузить данные сундуков', e);
+        }
+    }
+
+    /**
+     * Сохранение данных сундуков в localStorage
+     */
+    saveChestData() {
+        try {
+            localStorage.setItem('bf_chests', JSON.stringify({
+                activeChests: this.activeChests,
+                chestCooldown: this.chestCooldown
+            }));
+        } catch (e) {
+            Logger.warn('ChestManager', 'Не удалось сохранить данные сундуков', e);
+        }
+    }
+
     openChest({ rarity, free = false }) {
         const chestType = this.chestTypes[rarity];
         if (!chestType) return null;
 
         // Проверка лимитов для бесплатных сундуков
         if (free && this.chestCooldown > 0) {
-            Logger.warn('Free chest on cooldown!');
+            Logger.warn('ChestManager', 'Free chest on cooldown!');
             return null;
         }
 
@@ -93,12 +122,9 @@ class ChestManager {
             this.chestCooldown = this.freeChestInterval;
         }
 
-        SaveManager.save('chests', {
-            activeChests: this.activeChests,
-            chestCooldown: this.chestCooldown
-        });
+        this.saveChestData();
 
-        EventBus.emit('chest_opened', { chest });
+        gameEventBus.emit('chest_opened', { chest });
         this.notifyListeners();
         return chest;
     }
@@ -111,34 +137,38 @@ class ChestManager {
         const chestType = this.chestTypes[chest.type];
 
         if (Date.now() < chest.unlockTime) {
-            Logger.warn('Chest not ready yet!');
+            Logger.warn('ChestManager', 'Chest not ready yet!');
             return null;
         }
 
         if (chest.claimed) {
-            Logger.warn('Chest already claimed!');
+            Logger.warn('ChestManager', 'Chest already claimed!');
             return null;
         }
 
         // Генерация наград
         const rewards = this.generateRewards(chest.type);
         
-        // Выдача наград
-        if (rewards.coins) ResourceManager.add('coins', rewards.coins);
-        if (rewards.gems) ResourceManager.add('gems', rewards.gems);
+        // Выдача наград через EconomyManager
+        if (this.economyManager) {
+            if (rewards.coins) {
+                this.economyManager.addCurrency(GameConfig.CURRENCY.COINS, rewards.coins, 'chest_reward');
+            }
+            if (rewards.gems) {
+                this.economyManager.addCurrency(GameConfig.CURRENCY.GEMS, rewards.gems, 'chest_reward');
+            }
+        }
+        
         if (rewards.creature) {
-            EventBus.emit('gacha_pull', { guaranteedRarity: rewards.creature });
+            gameEventBus.emit('gacha_pull', { guaranteedRarity: rewards.creature });
         }
 
         chest.claimed = true;
         this.activeChests.splice(chestIndex, 1); // Удаление после получения
 
-        SaveManager.save('chests', {
-            activeChests: this.activeChests,
-            chestCooldown: this.chestCooldown
-        });
+        this.saveChestData();
 
-        EventBus.emit('chest_claimed', { chest, rewards });
+        gameEventBus.emit('chest_claimed', { chest, rewards });
         this.notifyListeners();
         return rewards;
     }
@@ -155,20 +185,17 @@ class ChestManager {
         // Стоимость мгновенного открытия (1 гем за 30 секунд)
         const cost = Math.ceil(timeRemaining / 30000);
         
-        if (!ResourceManager.has('gems', cost)) {
-            EventBus.emit('not_enough_gems', { needed: cost });
+        if (!this.economyManager || !this.economyManager.hasEnough(GameConfig.CURRENCY.GEMS, cost)) {
+            gameEventBus.emit('not_enough_gems', { needed: cost });
             return false;
         }
 
-        ResourceManager.spend('gems', cost);
+        this.economyManager.spendCurrency(GameConfig.CURRENCY.GEMS, cost, 'chest_instant_open');
         chest.unlockTime = Date.now();
         
-        SaveManager.save('chests', {
-            activeChests: this.activeChests,
-            chestCooldown: this.chestCooldown
-        });
+        this.saveChestData();
 
-        EventBus.emit('chest_instant_opened', { chest, cost });
+        gameEventBus.emit('chest_instant_opened', { chest, cost });
         this.notifyListeners();
         return true;
     }
@@ -216,7 +243,7 @@ class ChestManager {
         // Проверка готовых сундуков
         const readyCount = this.activeChests.filter(c => Date.now() >= c.unlockTime && !c.claimed).length;
         if (readyCount > 0) {
-            EventBus.emit('chests_ready', { count: readyCount });
+            gameEventBus.emit('chests_ready', { count: readyCount });
         }
     }
 

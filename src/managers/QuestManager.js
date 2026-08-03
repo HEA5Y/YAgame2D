@@ -33,7 +33,7 @@ class QuestManager {
 
     generateDailyQuests() {
         // Выбираем 3 случайных ежедневных квеста
-        const shuffled = this.shuffleArray(this.dailyQuestPool);
+        const shuffled = this.shuffleArray(this.dailyQuestPool); // ← теперь клонирует
         const selected = shuffled.slice(0, 3);
         // Очищаем предыдущие ежедневные
         this.activeQuests = this.activeQuests.filter(q => q.resetPeriod !== 'daily');
@@ -61,12 +61,16 @@ class QuestManager {
         });
     }
 
+    /**
+     * Немутирующий shuffle — клонирует массив перед перемешиванием
+     */
     shuffleArray(arr) {
-        for (let i = arr.length - 1; i > 0; i--) {
+        const copy = [...arr]; // ← клонируем, не мутируем оригинал
+        for (let i = copy.length - 1; i > 0; i--) {
             const j = Math.floor(Math.random() * (i + 1));
-            [arr[i], arr[j]] = [arr[j], arr[i]];
+            [copy[i], copy[j]] = [copy[j], copy[i]];
         }
-        return arr;
+        return copy;
     }
 
     checkResets() {
@@ -138,16 +142,19 @@ class QuestManager {
     completeQuest(quest) {
         if (quest.completed) return;
         quest.completed = true;
-        // Награда
-        const econ = window.gameInstance.managers.economy;
-        if (quest.reward.coins) {
-            econ.addCurrency(GameConfig.CURRENCY.COINS, quest.reward.coins, 'quest');
-        }
-        if (quest.reward.gems) {
-            econ.addCurrency(GameConfig.CURRENCY.GEMS, quest.reward.gems, 'quest');
-        }
-        if (quest.reward.research) {
-            econ.addCurrency(GameConfig.CURRENCY.RESEARCH_POINTS, quest.reward.research, 'quest');
+        
+        // Награда через EconomyManager из реестра
+        const econ = (window.ManagerRegistry) ? window.ManagerRegistry.get('economy') : null;
+        if (econ) {
+            if (quest.reward.coins) {
+                econ.addCurrency(GameConfig.CURRENCY.COINS, quest.reward.coins, 'quest');
+            }
+            if (quest.reward.gems) {
+                econ.addCurrency(GameConfig.CURRENCY.GEMS, quest.reward.gems, 'quest');
+            }
+            if (quest.reward.research) {
+                econ.addCurrency(GameConfig.CURRENCY.RESEARCH_POINTS, quest.reward.research, 'quest');
+            }
         }
 
         this.completedQuests.push(quest.id);

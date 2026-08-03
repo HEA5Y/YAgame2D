@@ -2,20 +2,7 @@
  * Класс YandexSDKManager
  * Полная интеграция Yandex Games SDK. Паттерн Singleton.
  */
-import { EventBus } from '../core/EventBus.js'; 
-import { Logger } from '../utils/Logger.js';
-
 class YandexSDKManager {
-    async initialize() {
-        try {
-            Logger.info('Начинаем инициализацию Yandex SDK...');
-            await YaGames.init();
-            EventBus.emit('SDK_READY', this);
-            Logger.info('Yandex SDK успешно инициализирован.');
-        } catch (error) {
-            Logger.error('Ошибка при загрузке Yandex SDK:', error);
-        }
-    }
     constructor() {
         if (YandexSDKManager.instance) {
             return YandexSDKManager.instance;
@@ -243,4 +230,5 @@ class YandexSDKManager {
     }
 }
 
-const yandexSDK = new YandexSDKManager();
+// Глобальный экземпляр для доступа из других скриптов
+window.yandexSDK = new YandexSDKManager();

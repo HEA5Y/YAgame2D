@@ -9,7 +9,7 @@ class JuiceManager {
         this.confettiParticles = [];
         this.fireworksParticles = [];
         this.comboCount = 0;
-        this.comboTimer = 0;
+        this.comboTimer = 0; // ← теперь в СЕКУНДАХ
         this.lastActionTime = 0;
         this.criticalChance = 0.1; // 10% шанс крита
         this.criticalMultiplier = 3;
@@ -18,12 +18,12 @@ class JuiceManager {
     }
 
     init() {
-        EventBus.on('trigger_shake', this.triggerShake.bind(this));
-        EventBus.on('trigger_flash', this.triggerFlash.bind(this));
-        EventBus.on('spawn_confetti', this.spawnConfetti.bind(this));
-        EventBus.on('spawn_fireworks', this.spawnFireworks.bind(this));
-        EventBus.on('action_performed', this.handleAction.bind(this));
-        EventBus.on('production_complete', this.checkCritical.bind(this));
+        gameEventBus.on('trigger_shake', this.triggerShake.bind(this));
+        gameEventBus.on('trigger_flash', this.triggerFlash.bind(this));
+        gameEventBus.on('spawn_confetti', this.spawnConfetti.bind(this));
+        gameEventBus.on('spawn_fireworks', this.spawnFireworks.bind(this));
+        gameEventBus.on('action_performed', this.handleAction.bind(this));
+        gameEventBus.on('production_complete', this.checkCritical.bind(this));
     }
 
     addListener(callback) {
@@ -35,12 +35,12 @@ class JuiceManager {
     }
 
     // Тряска экрана
-    triggerShake(intensity = 5, duration = 300) {
+    triggerShake(intensity = 5, duration = 0.3) { // ← duration теперь в секундах
         this.shakeIntensity = intensity;
         const startTime = Date.now();
         
         const animate = () => {
-            const elapsed = Date.now() - startTime;
+            const elapsed = (Date.now() - startTime) / 1000; // ← в секундах
             const progress = elapsed / duration;
             
             if (progress < 1) {
@@ -56,13 +56,13 @@ class JuiceManager {
     }
 
     // Вспышка экрана
-    triggerFlash(color = '#ffffff', duration = 200) {
+    triggerFlash(color = '#ffffff', duration = 0.2) { // ← duration теперь в секундах
         this.flashOpacity = 0.8;
         this.flashColor = color;
         const startTime = Date.now();
         
         const animate = () => {
-            const elapsed = Date.now() - startTime;
+            const elapsed = (Date.now() - startTime) / 1000; // ← в секундах
             const progress = elapsed / duration;
             
             if (progress < 1) {
@@ -126,24 +126,24 @@ class JuiceManager {
     // Обработка действий для комбо
     handleAction() {
         const now = Date.now();
-        const timeDiff = now - this.lastActionTime;
+        const timeDiff = (now - this.lastActionTime) / 1000; // ← в секундах
         
-        if (timeDiff < 2000) { // 2 секунды на комбо
+        if (timeDiff < 2.0) { // ← 2 секунды на комбо (было 2000 мс)
             this.comboCount++;
-            this.comboTimer = 2000;
+            this.comboTimer = 2.0; // ← в секундах
             
             if (this.comboCount >= 5) {
-                EventBus.emit('combo_milestone', { count: this.comboCount });
-                this.triggerFlash('#fbbf24', 100);
+                gameEventBus.emit('combo_milestone', { count: this.comboCount });
+                this.triggerFlash('#fbbf24', 0.1);
             }
             
             if (this.comboCount >= 10) {
                 this.spawnConfetti(30);
-                this.triggerShake(3, 200);
+                this.triggerShake(3, 0.2);
             }
         } else {
             this.comboCount = 1;
-            this.comboTimer = 2000;
+            this.comboTimer = 2.0;
         }
         
         this.lastActionTime = now;
@@ -156,14 +156,14 @@ class JuiceManager {
             const criticalAmount = Math.floor(baseAmount * this.criticalMultiplier);
             const bonus = criticalAmount - baseAmount;
             
-            EventBus.emit('critical_production', { 
+            gameEventBus.emit('critical_production', { 
                 base: baseAmount, 
                 bonus: bonus, 
                 multiplier: this.criticalMultiplier 
             });
             
-            this.triggerFlash('#fbbf24', 150);
-            this.triggerShake(4, 250);
+            this.triggerFlash('#fbbf24', 0.15);
+            this.triggerShake(4, 0.25);
             
             return criticalAmount;
         }
@@ -173,20 +173,21 @@ class JuiceManager {
     update(deltaTime) {
         // Обновление таймера комбо
         if (this.comboTimer > 0) {
-            this.comboTimer -= deltaTime;
+            this.comboTimer -= deltaTime; // ← теперь оба в секундах
             if (this.comboTimer <= 0) {
                 this.comboCount = 0;
+                this.comboTimer = 0;
             }
         }
 
         // Обновление конфетти
         for (let i = this.confettiParticles.length - 1; i >= 0; i--) {
             const p = this.confettiParticles[i];
-            p.vy += p.gravity * (deltaTime / 1000);
-            p.x += p.vx * (deltaTime / 1000);
-            p.y += p.vy * (deltaTime / 1000);
-            p.rotation += p.rotationSpeed * (deltaTime / 1000);
-            p.life -= p.decay * (deltaTime / 1000);
+            p.vy += p.gravity * deltaTime;
+            p.x += p.vx * deltaTime;
+            p.y += p.vy * deltaTime;
+            p.rotation += p.rotationSpeed * deltaTime;
+            p.life -= p.decay * deltaTime;
             
             if (p.life <= 0 || p.y > window.innerHeight) {
                 this.confettiParticles.splice(i, 1);
@@ -198,8 +199,8 @@ class JuiceManager {
             const fw = this.fireworksParticles[i];
             
             if (!fw.exploded) {
-                fw.vy += 30 * (deltaTime / 1000); // Гравитация
-                fw.y += fw.vy * (deltaTime / 1000);
+                fw.vy += 30 * deltaTime; // Гравитация
+                fw.y += fw.vy * deltaTime;
                 
                 // Взрыв на пике
                 if (fw.vy >= 0) {
@@ -235,7 +236,7 @@ class JuiceManager {
             });
         }
         
-        this.triggerShake(2, 150);
+        this.triggerShake(2, 0.15);
     }
 
     getComboInfo() {

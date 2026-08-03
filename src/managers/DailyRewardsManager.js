@@ -44,23 +44,19 @@ class DailyRewardsManager {
         this.questRefreshTime = null;
         
         this.listeners = [];
+        
+        // Получаем economy из реестра
+        this.economyManager = (window.ManagerRegistry) ? window.ManagerRegistry.get('economy') : null;
     }
 
     init() {
-        const saved = SaveManager.load('daily');
-        if (saved) {
-            this.lastClaimDate = saved.lastClaimDate;
-            this.streak = saved.streak || 0;
-            this.dailyQuests = saved.dailyQuests || [];
-            this.questRefreshTime = saved.questRefreshTime;
-        }
-
+        this.loadData();
         this.checkDayReset();
         this.generateDailyQuestsIfNeeded();
 
-        EventBus.on('daily_claim', this.claimDaily.bind(this));
-        EventBus.on('quest_complete', this.completeQuest.bind(this));
-        EventBus.on('daily_refresh', this.refreshQuests.bind(this));
+        gameEventBus.on('daily_claim', this.claimDaily.bind(this));
+        gameEventBus.on('quest_complete', this.completeQuest.bind(this));
+        gameEventBus.on('daily_refresh', this.refreshQuests.bind(this));
     }
 
     addListener(callback) {
@@ -69,6 +65,34 @@ class DailyRewardsManager {
 
     notifyListeners() {
         this.listeners.forEach(cb => cb(this));
+    }
+
+    loadData() {
+        try {
+            const saved = localStorage.getItem('bf_daily');
+            if (saved) {
+                const data = JSON.parse(saved);
+                this.lastClaimDate = data.lastClaimDate;
+                this.streak = data.streak || 0;
+                this.dailyQuests = data.dailyQuests || [];
+                this.questRefreshTime = data.questRefreshTime;
+            }
+        } catch (e) {
+            Logger.warn('DailyRewardsManager', 'Не удалось загрузить данные', e);
+        }
+    }
+
+    saveData() {
+        try {
+            localStorage.setItem('bf_daily', JSON.stringify({
+                lastClaimDate: this.lastClaimDate,
+                streak: this.streak,
+                dailyQuests: this.dailyQuests,
+                questRefreshTime: this.questRefreshTime
+            }));
+        } catch (e) {
+            Logger.warn('DailyRewardsManager', 'Не удалось сохранить данные', e);
+        }
     }
 
     checkDayReset() {
@@ -85,7 +109,7 @@ class DailyRewardsManager {
                 
                 if (diffDays > 1) {
                     this.streak = 0; // Сброс серии при пропуске
-                    Logger.info('Daily streak reset!');
+                    Logger.info('DailyRewardsManager', 'Daily streak reset!');
                 }
             }
         }
@@ -103,35 +127,30 @@ class DailyRewardsManager {
         const dayIndex = ((this.streak - 1) % 30);
         const reward = this.dailyRewards[dayIndex];
 
-        // Выдача награды
-        if (reward.type === 'coins') {
-            ResourceManager.add('coins', reward.amount);
-        } else if (reward.type === 'gems') {
-            ResourceManager.add('gems', reward.amount);
+        // Выдача награды через EconomyManager
+        if (reward.type === 'coins' && this.economyManager) {
+            this.economyManager.addCurrency(GameConfig.CURRENCY.COINS, reward.amount, 'daily_reward');
+        } else if (reward.type === 'gems' && this.economyManager) {
+            this.economyManager.addCurrency(GameConfig.CURRENCY.GEMS, reward.amount, 'daily_reward');
         } else if (reward.type === 'boost') {
-            EventBus.emit('activate_boost', { type: 'production', multiplier: 2, duration: reward.duration });
+            gameEventBus.emit('activate_boost', { type: 'production', multiplier: 2, duration: reward.duration });
         } else if (reward.type === 'chest') {
-            EventBus.emit('open_chest', { rarity: reward.rarity, free: true });
+            gameEventBus.emit('open_chest', { rarity: reward.rarity, free: true });
         } else if (reward.type === 'creature') {
-            EventBus.emit('gacha_pull', { guaranteedRarity: reward.rarity });
+            gameEventBus.emit('gacha_pull', { guaranteedRarity: reward.rarity });
         }
 
         // Бонус за серию
-        if (this.streak % 7 === 0) {
+        if (this.streak % 7 === 0 && this.economyManager) {
             const bonus = Math.floor(reward.amount * 0.5);
-            if (reward.type === 'coins') ResourceManager.add('coins', bonus);
-            if (reward.type === 'gems') ResourceManager.add('gems', Math.floor(bonus / 10));
-            EventBus.emit('daily_streak_bonus', { streak: this.streak, bonus });
+            if (reward.type === 'coins') this.economyManager.addCurrency(GameConfig.CURRENCY.COINS, bonus, 'daily_streak');
+            if (reward.type === 'gems') this.economyManager.addCurrency(GameConfig.CURRENCY.GEMS, Math.floor(bonus / 10), 'daily_streak');
+            gameEventBus.emit('daily_streak_bonus', { streak: this.streak, bonus });
         }
 
-        SaveManager.save('daily', {
-            lastClaimDate: this.lastClaimDate,
-            streak: this.streak,
-            dailyQuests: this.dailyQuests,
-            questRefreshTime: this.questRefreshTime
-        });
+        this.saveData();
 
-        EventBus.emit('daily_reward_claimed', { day: dayIndex + 1, reward, streak: this.streak });
+        gameEventBus.emit('daily_reward_claimed', { day: dayIndex + 1, reward, streak: this.streak });
         this.notifyListeners();
         return true;
     }
@@ -156,7 +175,7 @@ class DailyRewardsManager {
 
         // Выбор 3 случайных квестов
         this.dailyQuests = [];
-        const shuffled = questTemplates.sort(() => 0.5 - Math.random());
+        const shuffled = [...questTemplates].sort(() => 0.5 - Math.random());
         
         for (let i = 0; i < 3 && i < shuffled.length; i++) {
             this.dailyQuests.push({
@@ -168,14 +187,9 @@ class DailyRewardsManager {
         }
 
         this.questRefreshTime = Date.now();
-        SaveManager.save('daily', {
-            lastClaimDate: this.lastClaimDate,
-            streak: this.streak,
-            dailyQuests: this.dailyQuests,
-            questRefreshTime: this.questRefreshTime
-        });
+        this.saveData();
 
-        EventBus.emit('daily_quests_refreshed', { quests: this.dailyQuests });
+        gameEventBus.emit('daily_quests_refreshed', { quests: this.dailyQuests });
         this.notifyListeners();
     }
 
@@ -187,25 +201,23 @@ class DailyRewardsManager {
         
         if (quest.progress >= quest.target && !quest.completed) {
             quest.completed = true;
-            EventBus.emit('quest_completed', { quest });
+            gameEventBus.emit('quest_completed', { quest });
             
-            // Выдача награды
-            if (quest.reward.type === 'coins') {
-                ResourceManager.add('coins', quest.reward.amount);
-            } else if (quest.reward.type === 'gems') {
-                ResourceManager.add('gems', quest.reward.amount);
-            } else if (quest.reward.type === 'chest') {
-                EventBus.emit('open_chest', { rarity: quest.reward.rarity, free: true });
+            // Выдача награды через EconomyManager
+            if (this.economyManager) {
+                if (quest.reward.type === 'coins') {
+                    this.economyManager.addCurrency(GameConfig.CURRENCY.COINS, quest.reward.amount, 'daily_quest');
+                } else if (quest.reward.type === 'gems') {
+                    this.economyManager.addCurrency(GameConfig.CURRENCY.GEMS, quest.reward.amount, 'daily_quest');
+                }
+            }
+            
+            if (quest.reward.type === 'chest') {
+                gameEventBus.emit('open_chest', { rarity: quest.reward.rarity, free: true });
             }
         }
 
-        SaveManager.save('daily', {
-            lastClaimDate: this.lastClaimDate,
-            streak: this.streak,
-            dailyQuests: this.dailyQuests,
-            questRefreshTime: this.questRefreshTime
-        });
-
+        this.saveData();
         this.notifyListeners();
     }
 

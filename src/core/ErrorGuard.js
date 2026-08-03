@@ -71,19 +71,22 @@ class ErrorGuard {
     }
 
     _attachGlobalHandlers() {
-        window.onerror = (msg, source, line, col, error) => {
+        // ИСПРАВЛЕНО: используем addEventListener вместо прямого присваивания window.onerror
+        // чтобы не перезаписывать обработчики других библиотек (Yandex SDK и т.д.)
+        window.addEventListener('error', (event) => {
+            const { message, filename, lineno, colno, error } = event;
             if (!this.hasCriticalError) {
-                // Не показываем полный экран для мелких ошибок скриптов, только логируем
-                console.error(`[Global Error] ${msg} (${source}:${line})`);
+                console.error(`[Global Error] ${message} (${filename}:${lineno}:${colno})`);
             }
+            // Не вызываем event.preventDefault(), позволяем другим обработчикам сработать
             return false;
-        };
+        });
 
-        window.onunhandledrejection = (event) => {
+        window.addEventListener('unhandledrejection', (event) => {
             console.error('[Unhandled Rejection]', event.reason);
             // Можно раскомментировать, если нужно падение на любых промисах
-            // this.showCriticalError(event.reason); 
-        };
+            // this.showCriticalError(event.reason);
+        });
     }
 }
 

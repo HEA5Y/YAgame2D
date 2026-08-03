@@ -69,6 +69,15 @@ class FactoryManager {
             }
         });
         
+        // ИСПРАВЛЕНО: слушаем prestige_speed_bonus и применяем как modifier_speed
+        gameEventBus.on('prestige_speed_bonus', (data) => {
+            if (data && data.multiplier) {
+                for (const line of this.lines.values()) {
+                    line.speedMultiplier = data.multiplier;
+                }
+            }
+        });
+        
         gameEventBus.on(GameConfig.EVENTS.PRESTIGE_ACTIVATED, (data) => {
             // Сброс прогресса линий при престиже
             for (const line of this.lines.values()) {
@@ -103,6 +112,17 @@ class FactoryManager {
             }
         }
         return total;
+    }
+    
+    /**
+     * Обработка оффлайн-дохода
+     */
+    processOfflineIncome(seconds) {
+        const perSecond = this.getTotalProductionPerSecond();
+        const total = perSecond.multiply(seconds);
+        // Применяем множитель оффлайн
+        const final = total.multiply(GameConfig.ECONOMY.OFFLINE_PRODUCTION_PERCENT);
+        return final;
     }
     
     /**
@@ -247,15 +267,15 @@ class FactoryManager {
                     if (collected) {
                         gameEventBus.emit('manual_collect');
                         
-                        // Визуальный эффект
-                        const ui = window.gameInstance.managers.ui;
-                        if (ui) {
+                        // Визуальный эффект — получаем UI из реестра
+                        const ui = (window.ManagerRegistry) ? window.ManagerRegistry.get('ui') : null;
+                        if (ui && typeof ui.spawnFloatingText === 'function') {
                             ui.spawnFloatingText(x, y, `+${collected.format()}`, '#ffdd44');
                         }
                         
-                        // Частицы
-                        const particleManager = window.gameInstance.managers.particle;
-                        if (particleManager) {
+                        // Частицы — получаем particle из реестра
+                        const particleManager = (window.ManagerRegistry) ? window.ManagerRegistry.get('particle') : null;
+                        if (particleManager && typeof particleManager.burst === 'function') {
                             particleManager.burst(x, y, '#ffdd44');
                         }
                         

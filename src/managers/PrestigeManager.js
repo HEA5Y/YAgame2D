@@ -126,12 +126,24 @@ class PrestigeManager {
         this.totalBrainCellsEarned = this.totalBrainCellsEarned.add(earned);
         this.prestigeCount++;
 
-        // Сброс мягкой валюты и линий
-        this.economyManager.wallets[GameConfig.CURRENCY.COINS] = new BigNumber(
-            this.permanentBonuses['start_gold'] * this.bonusEffects['start_gold']
-        );
+        // ИСПРАВЛЕНО: безопасный сброс мягкой валюты через EconomyManager
+        const startGold = this.permanentBonuses['start_gold'] * this.bonusEffects['start_gold'];
+        this.economyManager.resetCurrency(GameConfig.CURRENCY.COINS, startGold);
         
-        // Сброс прогресса фабричных линий (через EventBus оповещаем FactoryManager, когда он появится)
+        // Сброс прогресса фабричных линий через реестр
+        const factoryManager = (window.ManagerRegistry) ? window.ManagerRegistry.get('factory') : null;
+        if (factoryManager && factoryManager.lines) {
+            for (const line of factoryManager.lines.values()) {
+                line.level = 0;
+                line.unlocked = false;
+                line.progress = 0;
+                line.pendingCollection = new BigNumber(0);
+                line.automated = false;
+                line.workersCount = 0;
+            }
+            Logger.info('PrestigeManager', 'Прогресс фабрики сброшен из-за престижа');
+        }
+        
         gameEventBus.emit(GameConfig.EVENTS.PRESTIGE_ACTIVATED, {
             layer: this.prestigeLayer,
             brainCellsEarned: earned.clone(),
@@ -159,10 +171,10 @@ class PrestigeManager {
         const costDiscount = Math.max(0.01, 1 - (this.permanentBonuses['cost_reduction'] * this.bonusEffects['cost_reduction']));
         this.economyManager.setGlobalMultiplier('costDiscount', costDiscount);
 
-        // Скорость (через TimeManager, когда интегрируем)
+        // Скорость — эмитим modifier_speed (который слушает FactoryManager)
         const speedBonus = 1 + (this.permanentBonuses['speed_boost'] * this.bonusEffects['speed_boost']);
-        // Влияет на FactoryLine.speedMultiplier через EventBus
-        gameEventBus.emit('prestige_speed_bonus', { multiplier: speedBonus });
+        // ИСПРАВЛЕНО: используем существующее событие modifier_speed
+        gameEventBus.emit('modifier_speed', speedBonus);
     }
 
     /**
@@ -245,11 +257,13 @@ class PrestigeManager {
             this.brainCells = new BigNumber(0);
             this.brainCells.mantissa = data.brainCells.m;
             this.brainCells.exponent = data.brainCells.e;
+            this.brainCells.normalize();
         }
         if (data.totalBrainCellsEarned) {
             this.totalBrainCellsEarned = new BigNumber(0);
             this.totalBrainCellsEarned.mantissa = data.totalBrainCellsEarned.m;
             this.totalBrainCellsEarned.exponent = data.totalBrainCellsEarned.e;
+            this.totalBrainCellsEarned.normalize();
         }
         if (data.permanentBonuses) {
             Object.assign(this.permanentBonuses, data.permanentBonuses);

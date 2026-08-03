@@ -27,7 +27,7 @@ class CanvasManager {
         this.setupResizeHandler();
         this.resize();
         
-        Logger.info('CanvasManager initialized');
+        Logger.info('CanvasManager', 'CanvasManager initialized');
     }
 
     setupResizeHandler() {
@@ -96,10 +96,10 @@ class CanvasManager {
 
         this.dirty = true;
 
-        Logger.debug(`Canvas resized: ${this.width}x${this.height}, scale: ${this.scale.toFixed(2)}`);
+        Logger.debug('CanvasManager', `Canvas resized: ${this.width}x${this.height}, scale: ${this.scale.toFixed(2)}`);
         
         // Генерируем событие resize через EventBus
-        if (window.gameInstance?.eventBus) {
+        if (window.gameInstance && window.gameInstance.eventBus) {
             window.gameInstance.eventBus.emit(GameConfig.EVENTS.RESIZE, {
                 width: this.width,
                 height: this.height,
@@ -132,6 +132,14 @@ class CanvasManager {
     }
 
     getCtx() {
+        return this.ctx;
+    }
+
+    /**
+     * Алиас для совместимости с Engine.js
+     * @returns {CanvasRenderingContext2D}
+     */
+    getContext() {
         return this.ctx;
     }
 
@@ -172,7 +180,7 @@ class CanvasManager {
     destroy() {
         this.canvas = null;
         this.ctx = null;
-        Logger.info('CanvasManager destroyed');
+        Logger.info('CanvasManager', 'CanvasManager destroyed');
     }
 }
 

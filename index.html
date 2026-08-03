@@ -60,68 +60,77 @@
         </div>
     </div>
 
-    <!-- СКРИПТЫ (СТРОГИЙ ПОРЯДОК!) -->
+    <!-- ========================================== -->
+    <!-- 1. Утилиты и Ядро                          -->
+    <!-- ========================================== -->
+    <script src="Logger.js"></script>
+    <script src="MathUtils.js"></script>
+    <script src="BigNumber.js"></script>
+    <script src="GameConfig.js"></script>
+    <script src="EventBus.js"></script>
+    <script src="ErrorGuard.js"></script>
+    <script src="CanvasManager.js"></script>
+    <script src="SaveVersionManager.js"></script>
+    <script src="ManagerRegistry.js"></script>
+
+    <!-- ========================================== -->
+    <!-- 2. Данные (ОБЯЗАТЕЛЬНО ДО МЕНЕДЖЕРОВ)      -->
+    <!-- ========================================== -->
+    <script src="EconomyData.js"></script>
+    <script src="UpgradeData.js"></script>
+    <script src="AchievementData.js"></script>
+    <script src="QuestData.js"></script>
+    <script src="EventData.js"></script>
+
+    <!-- ========================================== -->
+    <!-- 3. Сущности                                -->
+    <!-- ========================================== -->
+    <script src="FloatingText.js"></script>
+    <script src="FactoryLine.js"></script>
+    <script src="Worker.js"></script>
+
+    <!-- ========================================== -->
+    <!-- 4. Менеджеры (Базовые)                     -->
+    <!-- ========================================== -->
+    <script src="AssetManager.js"></script>
+    <script src="TimeManager.js"></script>
+    <script src="AudioManager.js"></script>
+    <script src="ObjectPoolManager.js"></script>
+    <script src="TweenManager.js"></script>
+    <script src="ParticleManager.js"></script>
+    <script src="JuiceManager.js"></script>
+
+    <!-- ========================================== -->
+    <!-- 5. Менеджеры (Логика / Экономика)          -->
+    <!-- ========================================== -->
+    <script src="EconomyManager.js"></script>
+    <script src="ResourceManager.js"></script>
+    <script src="SaveManager.js"></script>
     
-    <!-- 1. Утилиты и Ядро -->
-    <script src="src/utils/Logger.js"></script>
-    <script src="src/utils/MathUtils.js"></script>
-    <script src="src/core/EventBus.js"></script>
-    <script src="src/core/GameConfig.js"></script>
-    <script src="src/core/ErrorGuard.js"></script>
-    <script src="src/core/CanvasManager.js"></script>
-    <script src="src/core/SaveVersionManager.js"></script>
-    <script src="src/core/ManagerRegistry.js"></script>
+    <!-- ========================================== -->
+    <!-- 6. Менеджеры (Зависимые от базовых)        -->
+    <!-- ========================================== -->
+    <script src="FactoryManager.js"></script>
+    <script src="UpgradeManager.js"></script>
+    <script src="AchievementManager.js"></script>
+    <script src="QuestManager.js"></script>
+    <script src="EventManager.js"></script>
+    <script src="CollectionManager.js"></script>
+    <script src="ChestManager.js"></script>
+    <script src="BattlePassManager.js"></script>
+    <script src="DailyRewardsManager.js"></script>
+    <script src="PrestigeManager.js"></script>
+    <script src="OfflineManager.js"></script>
+    <script src="SceneManager.js"></script>
+    <script src="UIManager.js"></script>
+    <script src="YandexSDKManager.js"></script>
 
-    <!-- 2. Данные (ОБЯЗАТЕЛЬНО ДО МЕНЕДЖЕРОВ) -->
-    <script src="src/data/EconomyData.js"></script>
-    <script src="src/data/UpgradeData.js"></script>
-    <script src="src/data/AchievementData.js"></script>
-    <script src="src/data/QuestData.js"></script>
-    <script src="src/data/EventData.js"></script>
-    <script src="src/data/CollectionData.js"></script> <!-- Если есть -->
-
-    <!-- 3. Сущности -->
-    <script src="src/entities/FloatingText.js"></script>
-    <script src="src/entities/FactoryLine.js"></script>
-    <script src="src/entities/Worker.js"></script>
-    <script src="src/entities/Particle.js"></script> <!-- Если есть -->
-
-    <!-- 4. Менеджеры (Базовые) -->
-    <script src="src/managers/AssetManager.js"></script>
-    <script src="src/managers/TimeManager.js"></script>
-    <script src="src/managers/AudioManager.js"></script>
-    <script src="src/managers/ObjectPoolManager.js"></script>
-    <script src="src/managers/TweenManager.js"></script>
-    <script src="src/managers/ParticleManager.js"></script>
-    <script src="src/managers/JuiceManager.js"></script>
-
-    <!-- 5. Менеджеры (Логика) -->
-    <script src="src/managers/EconomyManager.js"></script>
-    <script src="src/managers/ResourceManager.js"></script>
-    <script src="src/managers/SaveManager.js"></script>
-    
-    <!-- 6. Менеджеры (Зависимые от базовых) -->
-    <script src="src/managers/FactoryManager.js"></script>
-    <script src="src/managers/UpgradeManager.js"></script>
-    <script src="src/managers/AchievementManager.js"></script>
-    <script src="src/managers/QuestManager.js"></script>
-    <script src="src/managers/EventManager.js"></script>
-    <script src="src/managers/CollectionManager.js"></script>
-    <script src="src/managers/ChestManager.js"></script>
-    <script src="src/managers/BattlePassManager.js"></script>
-    <script src="src/managers/DailyRewardsManager.js"></script>
-    <script src="src/managers/PrestigeManager.js"></script>
-    <script src="src/managers/OfflineManager.js"></script>
-    <script src="src/managers/SceneManager.js"></script>
-    <script src="src/managers/UIManager.js"></script>
-    <script src="src/managers/YandexSDKManager.js"></script>
-
-    <!-- 7. Системные классы -->
-    <script src="src/core/ManagersInitializer.js"></script>
-    <script src="src/core/Engine.js"></script>
-    <script src="src/core/Game.js"></script>
-    
-    <!-- 8. Точка входа -->
-    <script src="src/main.js"></script>
+    <!-- ========================================== -->
+    <!-- 7. Системные классы и точка входа          -->
+    <!-- ========================================== -->
+    <script src="ManagersInitializer.js"></script>
+    <script src="Engine.js"></script>
+    <script src="Game.js"></script>
+    <script src="main.js"></script>
 </body>
 </html>

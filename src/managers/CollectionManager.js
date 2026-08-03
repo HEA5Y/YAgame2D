@@ -29,16 +29,17 @@ class CollectionManager {
             divine: 'Божественный'
         };
         this.listeners = [];
+        
+        // Получаем economy из реестра для работы с валютой
+        this.economyManager = (window.ManagerRegistry) ? window.ManagerRegistry.get('economy') : null;
     }
 
     init() {
         // Загрузка коллекции из сохранения
-        const saved = SaveManager.load('collection');
-        if (saved) {
-            this.collection = saved;
-        }
-        EventBus.on('gacha_pull', this.handleGachaPull.bind(this));
-        EventBus.on('collection_upgrade', this.upgradeCreature.bind(this));
+        this.loadCollection();
+        
+        gameEventBus.on('gacha_pull', this.handleGachaPull.bind(this));
+        gameEventBus.on('collection_upgrade', this.upgradeCreature.bind(this));
     }
 
     addListener(callback) {
@@ -63,9 +64,8 @@ class CollectionManager {
             }
         }
 
-        // Выбор конкретного существа из пула редкости
-        const pool = EconomyData.getCreaturePool(rarity);
-        const creatureId = pool[Math.floor(Math.random() * pool.length)];
+        // Генерация ID существа на основе редкости
+        const creatureId = this.generateCreatureId(rarity);
         
         const isNew = !this.collection[creatureId];
         
@@ -76,31 +76,51 @@ class CollectionManager {
                 firstObtainTime: Date.now(),
                 rarity: rarity
             };
-            EventBus.emit('new_creature_unlocked', { id: creatureId, rarity });
+            gameEventBus.emit('new_creature_unlocked', { id: creatureId, rarity });
         } else {
             this.collection[creatureId].count++;
             // Шанс получить дубликат для улучшения (упрощено)
             if (Math.random() < 0.1) {
                 this.collection[creatureId].level++;
-                EventBus.emit('creature_upgraded', { id: creatureId });
+                gameEventBus.emit('creature_upgraded', { id: creatureId });
             }
         }
 
-        SaveManager.save('collection', this.collection);
-        EventBus.emit('gacha_result', { id: creatureId, rarity, isNew });
+        this.saveCollection();
+        gameEventBus.emit('gacha_result', { id: creatureId, rarity, isNew });
         this.notifyListeners();
         
         return { id: creatureId, rarity, isNew };
     }
 
+    /**
+     * Генерация ID существа на основе редкости
+     * (замена несуществующего EconomyData.getCreaturePool)
+     */
+    generateCreatureId(rarity) {
+        const prefixes = {
+            common: ['slime', 'rat', 'goblin', 'bug'],
+            rare: ['wolf', 'skeleton', 'zombie', 'imp'],
+            epic: ['vampire', 'witch', 'golem', 'demon'],
+            legendary: ['dragon', 'phoenix', 'titan', 'leviathan'],
+            mythic: ['cthulhu', 'behemoth', 'archangel'],
+            divine: ['god', 'cosmic_entity', 'universe']
+        };
+        const pool = prefixes[rarity] || ['creature'];
+        const prefix = pool[Math.floor(Math.random() * pool.length)];
+        return `${prefix}_${rarity}_${Math.floor(Math.random() * 1000)}`;
+    }
+
     upgradeCreature(creatureId) {
         if (!this.collection[creatureId]) return;
+        
+        // Используем EconomyManager из реестра вместо ResourceManager
         const cost = this.getUpgradeCost(creatureId);
-        if (ResourceManager.has('gems', cost)) {
-            ResourceManager.spend('gems', cost);
+        if (this.economyManager && this.economyManager.hasEnough(GameConfig.CURRENCY.GEMS, cost)) {
+            this.economyManager.spendCurrency(GameConfig.CURRENCY.GEMS, cost, 'creature_upgrade');
             this.collection[creatureId].level++;
-            SaveManager.save('collection', this.collection);
-            EventBus.emit('collection_updated');
+            this.saveCollection();
+            gameEventBus.emit('collection_updated');
             this.notifyListeners();
         }
     }
@@ -126,5 +146,56 @@ class CollectionManager {
         // Бонус за коллекцию: +1% за каждое уникальное существо
         const count = Object.keys(this.collection).length;
         return 1 + (count * 0.01);
+    }
+
+    // Загрузка/сохранение через localStorage вместо SaveManager
+    loadCollection() {
+        try {
+            const saved = localStorage.getItem('bf_collection');
+            if (saved) {
+                this.collection = JSON.parse(saved);
+            }
+        } catch (e) {
+            Logger.warn('CollectionManager', 'Не удалось загрузить коллекцию', e);
+        }
+    }
+
+    saveCollection() {
+        try {
+            localStorage.setItem('bf_collection', JSON.stringify(this.collection));
+        } catch (e) {
+            Logger.warn('CollectionManager', 'Не удалось сохранить коллекцию', e);
+        }
+    }
+
+    handleGachaPull(data) {
+        if (data && data.guaranteedRarity) {
+            // Гарантированная редкость
+            this.pullGuaranteed(data.guaranteedRarity);
+        } else {
+            this.pullGacha();
+        }
+    }
+
+    pullGuaranteed(rarity) {
+        const creatureId = this.generateCreatureId(rarity);
+        const isNew = !this.collection[creatureId];
+        
+        if (isNew) {
+            this.collection[creatureId] = {
+                count: 1,
+                level: 1,
+                firstObtainTime: Date.now(),
+                rarity: rarity
+            };
+            gameEventBus.emit('new_creature_unlocked', { id: creatureId, rarity });
+        } else {
+            this.collection[creatureId].count++;
+        }
+
+        this.saveCollection();
+        gameEventBus.emit('gacha_result', { id: creatureId, rarity, isNew });
+        this.notifyListeners();
+        return { id: creatureId, rarity, isNew };
     }
 }

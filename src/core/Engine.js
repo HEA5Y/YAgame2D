@@ -22,13 +22,12 @@ class Engine {
      */
     init(gameInstance) {
         this.game = gameInstance;
-        this.canvasManager = ManagerRegistry.get('CanvasManager');
+        this.canvasManager = ManagerRegistry.get('canvas'); // ← исправлено имя ключа
         
         if (!this.canvasManager) {
             throw new Error('Engine: CanvasManager не найден!');
         }
         
-        this.canvasManager.init();
         Logger.info('Engine', 'Движок инициализирован');
     }
 
@@ -102,9 +101,7 @@ class Engine {
                     manager.update(dt);
                 } catch (e) {
                     // Логгируем ошибку конкретного менеджера, но не крашим игру
-                    if (Math.random() < 0.01) { // Только 1% ошибок, чтобы не спамить
-                        Logger.warn('Engine', `Ошибка в ${key}:`, e.message);
-                    }
+                    Logger.warn('Engine', `Ошибка в ${key}:`, e.message);
                 }
             }
         }
@@ -119,7 +116,7 @@ class Engine {
 
         // Сброс трансформации перед кадром
         this.canvasManager.resetTransform();
-        ctx.clearRect(0, 0, this.canvasManager.width, this.canvasManager.height);
+        ctx.clearRect(0, 0, this.canvasManager.getWidth(), this.canvasManager.getHeight());
 
         // Рендер сцены
         if (this.game && typeof this.game.render === 'function') {
@@ -127,7 +124,7 @@ class Engine {
         }
         
         // Рендер UI поверх канваса (если нужно)
-        const uiManager = ManagerRegistry.get('UIManager');
+        const uiManager = ManagerRegistry.get('ui');
         if (uiManager && typeof uiManager.renderOverlay === 'function') {
             uiManager.renderOverlay(ctx);
         }

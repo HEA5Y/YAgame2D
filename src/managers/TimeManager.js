@@ -48,6 +48,14 @@ class TimeManager {
     }
 
     /**
+     * Расчет оффлайн-прогресса (алиас для совместимости)
+     * @returns {number} Секунд оффлайн
+     */
+    calculateOfflineProgress() {
+        return this.offlineSeconds;
+    }
+
+    /**
      * Обновление времени в главном цикле
      * @param {number} dt Delta time в секундах
      */
@@ -84,7 +92,22 @@ class TimeManager {
         return this.offlineSeconds;
     }
 
+    /**
+     * Сбросить оффлайн-секунды после начисления дохода
+     */
     clearOfflineSeconds() {
         this.offlineSeconds = 0;
+    }
+
+    /**
+     * Загрузка данных из сохранения
+     */
+    loadSaveData(data) {
+        if (!data) return;
+        this.lastUpdateTime = data.lastUpdateTime || Date.now();
+        this.totalPlayTime = data.totalPlayTime || 0;
+        
+        // Пересчитываем оффлайн при загрузке
+        this.initializeFromSave(this.lastUpdateTime, this.totalPlayTime);
     }
 }

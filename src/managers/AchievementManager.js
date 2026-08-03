@@ -27,7 +27,9 @@ class AchievementManager {
         // Слушаем изменения монет (общий заработок)
         gameEventBus.on(GameConfig.EVENTS.CURRENCY_CHANGED, (data) => {
             if (data.currency === GameConfig.CURRENCY.COINS && data.delta.isGreaterThan(0)) {
-                const total = window.gameInstance.managers.economy.getBalance(GameConfig.CURRENCY.COINS);
+                // ИСПРАВЛЕНО: получаем economy из реестра
+                const econ = (window.ManagerRegistry) ? window.ManagerRegistry.get('economy') : null;
+                const total = econ ? econ.getBalance(GameConfig.CURRENCY.COINS) : new BigNumber(0);
                 this.updateProgress('coins_total', total.toNumber());
             }
         });
@@ -52,7 +54,9 @@ class AchievementManager {
 
         // Время игры обновляется в TimeManager, но мы будем обновлять прогресс каждую минуту
         setInterval(() => {
-            const time = window.gameInstance.managers.time.totalPlayTime;
+            // ИСПРАВЛЕНО: получаем time из реестра
+            const timeManager = (window.ManagerRegistry) ? window.ManagerRegistry.get('time') : null;
+            const time = timeManager ? timeManager.totalPlayTime : 0;
             this.updateProgress('play_time', time);
         }, 60000);
     }
@@ -90,16 +94,18 @@ class AchievementManager {
         if (!ach) return;
         this.unlockedIds.add(id);
 
-        // Награда
-        const econ = window.gameInstance.managers.economy;
-        if (ach.reward.gems) {
-            econ.addCurrency(GameConfig.CURRENCY.GEMS, ach.reward.gems, 'achievement');
-        }
-        if (ach.reward.coins) {
-            econ.addCurrency(GameConfig.CURRENCY.COINS, ach.reward.coins, 'achievement');
-        }
-        if (ach.reward.research) {
-            econ.addCurrency(GameConfig.CURRENCY.RESEARCH_POINTS, ach.reward.research, 'achievement');
+        // Награда — получаем economy из реестра
+        const econ = (window.ManagerRegistry) ? window.ManagerRegistry.get('economy') : null;
+        if (econ) {
+            if (ach.reward.gems) {
+                econ.addCurrency(GameConfig.CURRENCY.GEMS, ach.reward.gems, 'achievement');
+            }
+            if (ach.reward.coins) {
+                econ.addCurrency(GameConfig.CURRENCY.COINS, ach.reward.coins, 'achievement');
+            }
+            if (ach.reward.research) {
+                econ.addCurrency(GameConfig.CURRENCY.RESEARCH_POINTS, ach.reward.research, 'achievement');
+            }
         }
 
         // Показать уведомление

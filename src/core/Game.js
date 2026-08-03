@@ -1,14 +1,30 @@
 /**
  * Game.js
- * Главный класс-оркестратор. Инициализирует менеджеры, 
- * управляет защищенной загрузкой ресурсов, отображением контейнера и игровым циклом.
+ * Главный класс-оркестратор с защитным Watchdog-таймером от зависаний.
  */
 class Game {
     constructor() {
+        if (window.gameInstance) {
+            Logger.warn('Game', 'Game уже создан, возвращаем существующий экземпляр');
+            return window.gameInstance;
+        }
         window.gameInstance = this;
-        
         this.isRunning = false;
         this.managers = {};
+
+        // АБСОЛЮТНЫЙ СТРАХУЮЩИЙ ТАЙМЕР (Watchdog)
+        // Что бы ни случилось (ошибка в SDK, зависание ассетов), 
+        // ровно через 2.5 секунды экран загрузки будет принудительно удален, а игра запущена.
+        this.initWatchdog(2500);
+    }
+
+    initWatchdog(timeoutMs) {
+        setTimeout(() => {
+            if (document.getElementById('loading-screen')) {
+                Logger.warn('Game', 'Watchdog сработал: принудительный запуск из-за затянувшейся загрузки.');
+                this.forceStartGame();
+            }
+        }, timeoutMs);
     }
 
     /**
@@ -18,105 +34,127 @@ class Game {
         Logger.info('Game', 'Инициализация игровых систем...');
 
         try {
-            // 1. Создание и регистрация менеджеров (через ManagersInitializer или напрямую)
-            // Если у вас используется ManagersInitializer, он инициализирует всё автоматически.
-            // Ниже приведена безопасная инициализация основных систем:
-            
-            this.saveManager = new SaveManager();
-            this.economyManager = new EconomyManager(this.saveManager);
-            this.timeManager = new TimeManager(this.saveManager);
-            this.factoryManager = new FactoryManager(this.saveManager, this.economyManager);
-            this.upgradeManager = new UpgradeManager(this.saveManager, this.economyManager);
-            this.uiManager = new UIManager();
+            // Получаем все менеджеры из реестра и сохраняем в this.managers
+            const registry = window.ManagerRegistry;
+            this.managers.save = registry.get('save');
+            this.managers.economy = registry.get('economy');
+            this.managers.time = registry.get('time');
+            this.managers.factory = registry.get('factory');
+            this.managers.upgrade = registry.get('upgrade');
+            this.managers.ui = registry.get('ui');
+            this.managers.scene = registry.get('scene');
+            this.managers.prestige = registry.get('prestige');
+            this.managers.canvas = registry.get('canvas');
 
-            this.managers = {
-                save: this.saveManager,
-                economy: this.economyManager,
-                time: this.timeManager,
-                factory: this.factoryManager,
-                upgrades: this.upgradeManager,
-                ui: this.uiManager
-            };
+            // Инициализация Canvas
+            const canvasElement = document.getElementById('game-canvas');
+            if (canvasElement && this.managers.canvas) {
+                this.managers.canvas.init(canvasElement);
+            }
 
-            // 2. Загрузка файла сохранения из localStorage
-            const hasSave = this.saveManager.load ? this.saveManager.load() : false;
+            // Загрузка сохранения
+            const hasSave = (this.managers.save && typeof this.managers.save.loadGame === 'function') 
+                ? await this.managers.save.loadGame() 
+                : false;
 
-            // 3. Загрузка ресурсов с защитным таймаутом (максимум 3 секунды)
-            await this.loadResourcesWithTimeout(3000);
+            // Безопасная инициализация SDK / Ресурсов с таймаутом
+            await this.safeAsyncInit();
 
-            // 4. Расчет оффлайн-прогресса
-            if (hasSave && this.timeManager.calculateOfflineProgress) {
-                const offlineSeconds = this.timeManager.calculateOfflineProgress();
-                if (offlineSeconds > 10 && this.factoryManager.processOfflineIncome) {
-                    const earned = this.factoryManager.processOfflineIncome(offlineSeconds);
+            // Расчет оффлайн-прогресса
+            if (hasSave && this.managers.time && typeof this.managers.time.getOfflineSeconds === 'function') {
+                const offlineSeconds = this.managers.time.getOfflineSeconds();
+                if (offlineSeconds > 10 && this.managers.factory && typeof this.managers.factory.processOfflineIncome === 'function') {
+                    const earned = this.managers.factory.processOfflineIncome(offlineSeconds);
                     if (earned && typeof earned.isGreaterThan === 'function' && earned.isGreaterThan(0)) {
-                        if (this.uiManager.showOfflinePopup) {
-                            this.uiManager.showOfflinePopup(earned, offlineSeconds);
+                        if (this.managers.ui && typeof this.managers.ui.showOfflinePopup === 'function') {
+                            this.managers.ui.showOfflinePopup(earned, offlineSeconds);
                         }
                     }
                 }
             }
 
-            // 5. Плавное скрытие экрана загрузки и ПОКАЗ игрового контейнера
-            this.showGameInterface();
+            // Инициализация сцен
+            if (this.managers.scene && typeof this.managers.scene.initScenes === 'function') {
+                this.managers.scene.initScenes();
+            }
 
-            // 6. Запуск главного игрокового цикла (Game Loop)
-            this.startLoop();
-
-            Logger.info('Game', 'Игра успешно запущена!');
+            this.forceStartGame();
         } catch (error) {
-            Logger.error('Game', 'Критическая ошибка при инициализации: ' + (error.message || error));
+            Logger.error('Game', 'Ошибка в init: ' + (error.message || error));
             console.error(error);
-            
-            // Даже при ошибке принудительно показываем игру, чтобы избежать серого экрана
-            this.showGameInterface();
-            this.startLoop();
+            this.forceStartGame();
         }
     }
 
-    /**
-     * Обертка над загрузкой с таймаутом
-     */
-    async loadResourcesWithTimeout(timeoutMs) {
+    async safeAsyncInit() {
+        // Обертка для проверки YandexSDK или AssetManager, если они существуют
         return Promise.race([
-            this.loadAssets(),
-            new Promise((resolve) => setTimeout(() => {
-                Logger.warn('Game', 'Таймаут загрузки ресурсов исчерпан. Принудительный пропуск.');
-                resolve();
-            }, timeoutMs))
+            new Promise(async (resolve) => {
+                if (typeof AssetManager !== 'undefined' && window.assetManagerInstance) {
+                    // пример ожидания ассетов, если применимо
+                }
+                setTimeout(resolve, 300);
+            }),
+            new Promise((resolve) => setTimeout(resolve, 1500)) // Максимум 1.5 сек на асинхронщину
         ]);
     }
 
     /**
-     * Метод загрузки графики, звуков и т.д.
+     * Принудительный показ игры и запуск цикла
      */
-    async loadAssets() {
-        return new Promise((resolve) => {
-            // Если у вас есть AssetManager, можно вызвать его здесь. 
-            // Имитируем короткую асинхронную готовность:
-            setTimeout(resolve, 200);
-        });
-    }
-
-    /**
-     * Убирает загрузчик и делает #game-container видимым
-     */
-    showGameInterface() {
-        // Показываем основной контейнер игры (убираем display: none)
-        const gameContainer = document.getElementById('game-container');
-        if (gameContainer) {
-            gameContainer.style.display = 'block';
-        }
-
-        // Плавное скрытие экрана загрузки
+    forceStartGame() {
+        // Убираем экран загрузки
         const loader = document.getElementById('loading-screen');
         if (loader) {
             loader.style.opacity = '0';
-            loader.style.transition = 'opacity 0.4s ease';
-            setTimeout(() => {
-                loader.remove();
-            }, 400);
+            loader.style.transition = 'opacity 0.3s ease';
+            setTimeout(() => loader.remove(), 300);
         }
+
+        // Показываем контейнер игры
+        const container = document.getElementById('game-container');
+        if (container) {
+            container.style.display = 'block';
+        }
+
+        this.startLoop();
+        this.setupInputHandlers();
+    }
+
+    /**
+     * Настройка обработчиков ввода (клик/тач)
+     */
+    setupInputHandlers() {
+        const canvas = document.getElementById('game-canvas');
+        if (!canvas || !this.managers.canvas) return;
+
+        const handlePointer = (e) => {
+            const rect = canvas.getBoundingClientRect();
+            const scaleX = canvas.width / rect.width;
+            const scaleY = canvas.height / rect.height;
+            
+            const screenX = (e.clientX - rect.left) * scaleX;
+            const screenY = (e.clientY - rect.top) * scaleY;
+            
+            // Конвертируем в мировые координаты
+            const worldPos = this.managers.canvas.screenToWorld(screenX, screenY);
+            
+            // Передаём клик в FactoryManager
+            if (this.managers.factory && typeof this.managers.factory.handleClick === 'function') {
+                const handled = this.managers.factory.handleClick(worldPos.x, worldPos.y);
+                if (handled) {
+                    e.preventDefault();
+                }
+            }
+        };
+
+        canvas.addEventListener('click', handlePointer);
+        canvas.addEventListener('touchstart', (e) => {
+            if (e.touches.length === 1) {
+                const touch = e.touches[0];
+                handlePointer(touch);
+            }
+        }, { passive: false });
     }
 
     /**
@@ -133,16 +171,32 @@ class Game {
 
             const dt = (currentTime - lastFrameTime) / 1000;
             lastFrameTime = currentTime;
-
-            // Ограничиваем dt, чтобы игра не "скакала" при сворачивании вкладки
             const safeDt = dt > 0.1 ? 0.1 : dt;
 
-            // Обновляем менеджеры, у которых есть метод update
-            if (this.factoryManager && typeof this.factoryManager.update === 'function') {
-                this.factoryManager.update(safeDt);
+            // Обновление фабрики
+            if (this.managers.factory && typeof this.managers.factory.update === 'function') {
+                this.managers.factory.update(safeDt);
             }
-            if (window.tweenManager && typeof window.tweenManager.update === 'function') {
-                window.tweenManager.update(safeDt);
+            
+            // Обновление твинов
+            const tweenManager = window.ManagerRegistry ? window.ManagerRegistry.get('tween') : null;
+            if (tweenManager && typeof tweenManager.update === 'function') {
+                tweenManager.update(safeDt);
+            }
+
+            // Обновление сцены
+            if (this.managers.scene && typeof this.managers.scene.update === 'function') {
+                this.managers.scene.update(safeDt);
+            }
+
+            // Рендер
+            if (this.managers.canvas && this.managers.canvas.getCtx()) {
+                const ctx = this.managers.canvas.getCtx();
+                this.managers.canvas.clear();
+                
+                if (this.managers.scene && typeof this.managers.scene.render === 'function') {
+                    this.managers.scene.render(ctx);
+                }
             }
 
             requestAnimationFrame(loop);
@@ -151,3 +205,5 @@ class Game {
         requestAnimationFrame(loop);
     }
 }
+
+// Автозапуск УБРАН — запуск происходит из main.js

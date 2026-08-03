@@ -8,6 +8,8 @@ class EventBus {
             return EventBus.instance;
         }
         this.listeners = new Map();
+        // ИСПРАВЛЕНО: маппинг оригинальных callback → wrapper для корректного off()
+        this.onceWrappers = new Map();
         EventBus.instance = this;
     }
 
@@ -35,6 +37,11 @@ class EventBus {
             this.off(event, wrapper, context);
             callback.apply(context, args);
         };
+        
+        // ИСПРАВЛЕНО: сохраняем связь оригинал → wrapper
+        const key = `${event}_${callback.toString()}`;
+        this.onceWrappers.set(key, wrapper);
+        
         this.on(event, wrapper, context);
     }
 
@@ -49,15 +56,26 @@ class EventBus {
             return;
         }
         
+        // ИСПРАВЛЕНО: если это off для once, ищем wrapper
+        const key = `${event}_${callback.toString()}`;
+        const wrapper = this.onceWrappers.get(key);
+        
+        const targetCallback = wrapper || callback;
+        
         const callbacks = this.listeners.get(event);
         const filteredCallbacks = callbacks.filter(
-            cb => cb.callback !== callback || cb.context !== context
+            cb => cb.callback !== targetCallback || cb.context !== context
         );
         
         if (filteredCallbacks.length === 0) {
             this.listeners.delete(event);
         } else {
             this.listeners.set(event, filteredCallbacks);
+        }
+        
+        // Чистим маппинг если wrapper был найден
+        if (wrapper) {
+            this.onceWrappers.delete(key);
         }
     }
 
@@ -89,6 +107,7 @@ class EventBus {
      */
     clearAll() {
         this.listeners.clear();
+        this.onceWrappers.clear();
     }
 }
 

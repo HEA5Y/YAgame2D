@@ -47,7 +47,7 @@ class SaveManager {
 
     collectSaveData() {
         const fullSaveData = {
-            version: GameConfig.GAME.VERSION,
+            version: GameConfig.SAVE_VERSION, // ← исправлено: используем SAVE_VERSION
             versionNumber: this.versionManager.getCurrentVersion(),
             timestamp: Date.now()
         };
@@ -66,16 +66,7 @@ class SaveManager {
     distributeSaveData(data) {
         if (!data) return;
         
-        // Миграция данных если версия устарела
-        const currentVersion = this.versionManager.getCurrentVersion();
-        const saveVersion = data.versionNumber || 0;
-        
-        if (saveVersion < currentVersion) {
-            Logger.info('SaveManager', `Миграция сохранения с версии ${saveVersion} до ${currentVersion}`);
-            data = this.versionManager.migrate(data, saveVersion, currentVersion);
-        }
-        
-        // Валидация данных
+        // Валидация данных через SaveVersionManager
         if (!this.versionManager.validateSaveData(data)) {
             Logger.warn('SaveManager', 'Сохранение не прошло валидацию, используются дефолтные значения');
             data = this.versionManager.createDefaultSave();
@@ -98,8 +89,12 @@ class SaveManager {
         let backupUsed = false;
 
         // 1. Попытка загрузить из облака Яндекса
-        if (GameConfig.SAVE.CLOUD_SAVE_ENABLED) {
-            saveData = await yandexSDK.loadCloudData();
+        if (GameConfig.SAVE.CLOUD_SAVE_ENABLED && window.yandexSDK) {
+            try {
+                saveData = await window.yandexSDK.loadCloudData();
+            } catch (error) {
+                Logger.warn('SaveManager', 'Ошибка загрузки из облака, переход к локальному хранилищу', error);
+            }
         }
 
         // 2. Если облако пустое, ищем в IndexedDB
@@ -149,8 +144,10 @@ class SaveManager {
         if (saveData) {
             Logger.info('SaveManager', 'Сохранение успешно найдено и применено');
             this.distributeSaveData(saveData);
+            return true;
         } else {
             Logger.info('SaveManager', 'Сохранений не найдено. Начат новый прогресс.');
+            return false;
         }
     }
 
@@ -186,8 +183,12 @@ class SaveManager {
         }
 
         // 3. Сохранение в облако
-        if (GameConfig.SAVE.CLOUD_SAVE_ENABLED) {
-            await yandexSDK.saveCloudData(data);
+        if (GameConfig.SAVE.CLOUD_SAVE_ENABLED && window.yandexSDK) {
+            try {
+                await window.yandexSDK.saveCloudData(data);
+            } catch (error) {
+                Logger.warn('SaveManager', 'Ошибка сохранения в облако', error);
+            }
         }
 
         this.lastSaveTime = Date.now();
@@ -214,8 +215,12 @@ class SaveManager {
             store.delete(this.saveKey);
         } catch (e) {}
 
-        if (GameConfig.SAVE.CLOUD_SAVE_ENABLED) {
-            await yandexSDK.saveCloudData({});
+        if (GameConfig.SAVE.CLOUD_SAVE_ENABLED && window.yandexSDK) {
+            try {
+                await window.yandexSDK.saveCloudData({});
+            } catch (error) {
+                Logger.warn('SaveManager', 'Ошибка очистки облачных данных', error);
+            }
         }
         
         Logger.info('SaveManager', 'Все сохранения удалены');

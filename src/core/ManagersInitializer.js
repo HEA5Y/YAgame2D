@@ -9,7 +9,9 @@ class ManagersInitializer {
         // Базовые сервисы (уже созданы как синглтоны)
         registry.register('config', GameConfig);
         registry.register('logger', Logger);
-        registry.register('eventBus', EventBus);
+        registry.register('eventBus', gameEventBus); // ← экземпляр, не класс
+        registry.register('canvas', window.CanvasManager); // ← добавлен CanvasManager
+        
         if (window.yandexSDK) {
             registry.register('sdk', window.yandexSDK);
         } else {
@@ -17,38 +19,44 @@ class ManagersInitializer {
             registry.register('sdk', null);
         }
         
-        // Создаём и регистрируем менеджеры (без зависимостей в конструкторе)
+        // Создаём базовые менеджеры первыми (другие зависят от них)
+        const saveManager = new SaveManager();
+        registry.register('save', saveManager);
+        
+        const timeManager = new TimeManager();
+        registry.register('time', timeManager);
+        
+        const economyManager = new EconomyManager(saveManager);
+        registry.register('economy', economyManager);
+        
+        const prestigeManager = new PrestigeManager(economyManager, saveManager);
+        registry.register('prestige', prestigeManager);
+        
+        // Менеджеры без зависимостей в конструкторе
         registry.register('audio', new AudioManager());
         registry.register('asset', new AssetManager());
-        registry.register('save', new SaveManager());
-        registry.register('time', new TimeManager());
         registry.register('resource', new ResourceManager());
         registry.register('objectPool', new ObjectPoolManager());
-        registry.register('economy', new EconomyManager());
-        registry.register('prestige', new PrestigeManager());
-        registry.register('ui', new UIManager());
-        registry.register('scene', new SceneManager());
-        
-        // Дополнительные менеджеры
-        registry.register('upgrade', new UpgradeManager());
-        registry.register('achievement', new AchievementManager());
-        registry.register('quest', new QuestManager());
-        registry.register('event', new EventManager());
-        registry.register('offline', new OfflineManager());
         registry.register('tween', new TweenManager());
         registry.register('particle', new ParticleManager());
+        registry.register('juice', new JuiceManager());
+        registry.register('ui', new UIManager());
+        registry.register('scene', new SceneManager(null)); // game назначается позже
         
-        // FactoryManager создаётся позже, после установки зависимостей
-        // registry.register('factory', new FactoryManager()); // Отложено
+        // Менеджеры с зависимостями от save / economy
+        registry.register('upgrade', new UpgradeManager(saveManager, economyManager));
+        registry.register('achievement', new AchievementManager(saveManager));
+        registry.register('quest', new QuestManager(saveManager));
+        registry.register('event', new EventManager());
+        registry.register('offline', new OfflineManager());
         
         // Менеджеры удержания и монетизации
         registry.register('collection', new CollectionManager());
         registry.register('battlePass', new BattlePassManager());
         registry.register('dailyRewards', new DailyRewardsManager());
         registry.register('chest', new ChestManager());
-        registry.register('juice', new JuiceManager());
         
-        // Заглушки для недостающих менеджеров (чтобы не ломался initOrder)
+        // Заглушки для недостающих менеджеров (чтобы не ломался initOrder в реестре)
         registry.register('world', {
             init: () => {},
             update: () => {},
@@ -82,7 +90,7 @@ class ManagersInitializer {
         const factoryManager = new FactoryManager(economyManager, saveManager);
         registry.register('factory', factoryManager);
         
-        // Передаём зависимости в другие менеджеры, если нужно
+        // Передаём зависимости в OfflineManager, если он поддерживает
         const offlineManager = registry.get('offline');
         if (offlineManager && typeof offlineManager.setDependencies === 'function') {
             offlineManager.setDependencies(factoryManager, economyManager);

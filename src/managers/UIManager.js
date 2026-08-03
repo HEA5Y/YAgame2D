@@ -5,31 +5,33 @@
  */
 class UIManager {
     constructor() {
-        this.uiLayer = document.getElementById('ui-layer'); //[cite: 44]
-        this.popupLayer = document.getElementById('popup-layer'); //[cite: 44]
+        this.uiLayer = document.getElementById('ui-layer');
+        this.popupLayer = document.getElementById('popup-layer');
         
-        this.elements = {}; //[cite: 44]
-        this.activePopups = []; //[cite: 44]
+        this.elements = {};
+        this.activePopups = [];
 
         // Инициализация пула объектов для плавающего текста (минимизирует работу GC)
         this.floatingTextPool = [];
         this.poolSize = 40;
         this.initFloatingTextPool();
 
-        this.initHUD(); //[cite: 44]
+        this.initHUD();
 
         // Подписываемся на события изменения баланса для мгновенного обновления интерфейса
-        gameEventBus.on(GameConfig.EVENTS.CURRENCY_CHANGED, this.updateCurrencyDisplay, this); //[cite: 44]
+        gameEventBus.on(GameConfig.EVENTS.CURRENCY_CHANGED, this.updateCurrencyDisplay, this);
     }
 
     /**
      * Выделение памяти под фиксированный пул DOM-элементов плавающего текста
+     * ИСПРАВЛЕНО: вставляем в ui-layer вместо document.body
      */
     initFloatingTextPool() {
+        const container = this.uiLayer || document.body;
         for (let i = 0; i < this.poolSize; i++) {
             const el = document.createElement('div');
             el.style.cssText = `
-                position: fixed;
+                position: absolute;
                 pointer-events: none;
                 z-index: 10000;
                 text-shadow: 0 0 10px rgba(0,0,0,0.8);
@@ -40,7 +42,7 @@ class UIManager {
                 display: none;
                 will-change: transform, opacity;
             `;
-            document.body.appendChild(el);
+            container.appendChild(el);
             this.floatingTextPool.push({ el, active: false });
         }
     }
@@ -71,12 +73,14 @@ class UIManager {
                     <button class="ui-nav-btn" data-target="collection" style="background: #1a1f2b; border: 2px solid #2a3548; border-radius: 12px; color: #fff; padding: 10px 16px; font-weight: bold; font-size: 14px; cursor: pointer;">👽 Мемы</button>
                 </div>
             </div>
-        `; //[cite: 44]
+        `;
         
-        this.uiLayer.insertAdjacentHTML('beforeend', hudHTML); //[cite: 44]
+        if (this.uiLayer) {
+            this.uiLayer.insertAdjacentHTML('beforeend', hudHTML);
+        }
         
-        this.elements.coinsText = document.getElementById('hud-coins'); //[cite: 44]
-        this.elements.gemsText = document.getElementById('hud-gems'); //[cite: 44]
+        this.elements.coinsText = document.getElementById('hud-coins');
+        this.elements.gemsText = document.getElementById('hud-gems');
     }
 
     /**
@@ -84,9 +88,9 @@ class UIManager {
      */
     updateCurrencyDisplay(data) {
         if (data.currency === GameConfig.CURRENCY.COINS && this.elements.coinsText) {
-            this.elements.coinsText.innerText = data.newValue.format(); //[cite: 44]
+            this.elements.coinsText.innerText = data.newValue.format();
         } else if (data.currency === GameConfig.CURRENCY.GEMS && this.elements.gemsText) {
-            this.elements.gemsText.innerText = data.newValue.format(); //[cite: 44]
+            this.elements.gemsText.innerText = data.newValue.format();
         }
     }
 
@@ -94,7 +98,7 @@ class UIManager {
      * Открытие модального окна / попапа с плавной анимацией
      */
     showPopup(title, htmlContent) {
-        const popupId = `popup_${Date.now()}`; //[cite: 44]
+        const popupId = `popup_${Date.now()}`;
         this.showCustomPopup(title, htmlContent, popupId);
     }
 
@@ -114,57 +118,64 @@ class UIManager {
                     </div>
                 </div>
             </div>
-        `; //[cite: 44]
+        `;
 
-        this.popupLayer.insertAdjacentHTML('beforeend', popupHTML); //[cite: 44]
-        const popupElement = document.getElementById(popupId); //[cite: 44]
+        if (this.popupLayer) {
+            this.popupLayer.insertAdjacentHTML('beforeend', popupHTML);
+        }
+        const popupElement = document.getElementById(popupId);
+        if (!popupElement) return;
         
         requestAnimationFrame(() => {
-            popupElement.style.opacity = '1'; //[cite: 44]
+            popupElement.style.opacity = '1';
         });
 
-        const closeBtn = popupElement.querySelector('.popup-close-btn'); //[cite: 44]
-        closeBtn.addEventListener('click', () => {
-            this.closePopup(popupId); //[cite: 44]
-        });
+        const closeBtn = popupElement.querySelector('.popup-close-btn');
+        if (closeBtn) {
+            closeBtn.addEventListener('click', () => {
+                this.closePopup(popupId);
+            });
+        }
 
-        this.activePopups.push(popupId); //[cite: 44]
-        gameEventBus.emit(GameConfig.EVENTS.POPUP_OPEN, { id: popupId }); //[cite: 44]
+        this.activePopups.push(popupId);
+        gameEventBus.emit(GameConfig.EVENTS.POPUP_OPEN, { id: popupId });
     }
 
     closePopup(popupId) {
-        const popupElement = document.getElementById(popupId); //[cite: 44]
+        const popupElement = document.getElementById(popupId);
         if (!popupElement) return;
 
-        popupElement.style.opacity = '0'; //[cite: 44]
+        popupElement.style.opacity = '0';
         setTimeout(() => {
-            popupElement.remove(); //[cite: 44]
-            this.activePopups = this.activePopups.filter(id => id !== popupId); //[cite: 44]
-            gameEventBus.emit(GameConfig.EVENTS.POPUP_CLOSE, { id: popupId }); //[cite: 44]
-        }, 250); //[cite: 44]
+            popupElement.remove();
+            this.activePopups = this.activePopups.filter(id => id !== popupId);
+            gameEventBus.emit(GameConfig.EVENTS.POPUP_CLOSE, { id: popupId });
+        }, 250);
     }
 
     /**
      * Создать контейнер для уведомлений
      */
     createNotificationContainer() {
-        if (this.notificationContainer) return; //[cite: 44]
+        if (this.notificationContainer) return;
         const container = document.createElement('div');
-        container.id = 'notification-container'; //[cite: 44]
+        container.id = 'notification-container';
         container.style.cssText = `
             position: absolute; bottom: 140px; left: 50%; transform: translateX(-50%);
             width: 90%; max-width: 400px; pointer-events: none; z-index: 999;
             display: flex; flex-direction: column; align-items: center; gap: 8px;
-        `; //[cite: 44]
-        this.uiLayer.appendChild(container); //[cite: 44]
-        this.notificationContainer = container; //[cite: 44]
+        `;
+        if (this.uiLayer) {
+            this.uiLayer.appendChild(container);
+        }
+        this.notificationContainer = container;
     }
 
     /**
      * Показать всплывающее уведомление
      */
     showNotification(text, icon = '⭐', duration = 2000) {
-        if (!this.notificationContainer) this.createNotificationContainer(); //[cite: 44]
+        if (!this.notificationContainer) this.createNotificationContainer();
         const el = document.createElement('div');
         el.style.cssText = `
             background: rgba(0,0,0,0.85); color: #fff; padding: 10px 20px;
@@ -173,35 +184,37 @@ class UIManager {
             transform: translateY(20px); opacity: 0;
             transition: all 0.4s ease-out; text-align: center;
             max-width: 100%; box-sizing: border-box;
-        `; //[cite: 44]
-        el.innerHTML = `${icon} ${text}`; //[cite: 44]
-        this.notificationContainer.appendChild(el); //[cite: 44]
+        `;
+        el.innerHTML = `${icon} ${text}`;
+        this.notificationContainer.appendChild(el);
         
         requestAnimationFrame(() => {
-            el.style.transform = 'translateY(0)'; //[cite: 44]
-            el.style.opacity = '1'; //[cite: 44]
+            el.style.transform = 'translateY(0)';
+            el.style.opacity = '1';
         });
         
         setTimeout(() => {
-            el.style.transform = 'translateY(-20px)'; //[cite: 44]
-            el.style.opacity = '0'; //[cite: 44]
-            setTimeout(() => el.remove(), 400); //[cite: 44]
-        }, duration); //[cite: 44]
+            el.style.transform = 'translateY(-20px)';
+            el.style.opacity = '0';
+            setTimeout(() => el.remove(), 400);
+        }, duration);
     }
 
     /**
      * Высокопроизводительный плавающий текст с использованием пула объектов
      */
     spawnFloatingText(x, y, text, color = '#ffdd44') {
-        const canvas = document.getElementById('game-canvas'); //[cite: 44]
-        const rect = canvas.getBoundingClientRect(); //[cite: 44]
-        const dpi = window.devicePixelRatio || 1; //[cite: 44]
-        const canvasWidth = canvas.width / dpi; //[cite: 44]
-        const canvasHeight = canvas.height / dpi; //[cite: 44]
-        const scaleX = rect.width / canvasWidth; //[cite: 44]
-        const scaleY = rect.height / canvasHeight; //[cite: 44]
-        const absX = rect.left + x * scaleX; //[cite: 44]
-        const absY = rect.top + y * scaleY; //[cite: 44]
+        const canvas = document.getElementById('game-canvas');
+        if (!canvas) return;
+        
+        const rect = canvas.getBoundingClientRect();
+        const dpi = window.devicePixelRatio || 1;
+        const canvasWidth = canvas.width / dpi;
+        const canvasHeight = canvas.height / dpi;
+        const scaleX = rect.width / canvasWidth;
+        const scaleY = rect.height / canvasHeight;
+        const absX = rect.left + x * scaleX;
+        const absY = rect.top + y * scaleY;
 
         // Извлекаем неактивный элемент из пула
         const poolItem = this.floatingTextPool.find(item => !item.active);
@@ -211,37 +224,37 @@ class UIManager {
         const el = poolItem.el;
 
         // Полный сброс стилей перед реактивацией
-        el.textContent = text; //[cite: 44]
-        el.style.color = color; //[cite: 44]
-        el.style.left = `${absX}px`; //[cite: 44]
-        el.style.top = `${absY}px`; //[cite: 44]
+        el.textContent = text;
+        el.style.color = color;
+        el.style.left = `${absX}px`;
+        el.style.top = `${absY}px`;
         el.style.transition = 'none';
         el.style.transform = 'translateY(0)';
         el.style.opacity = '0';
         el.style.display = 'block';
 
         requestAnimationFrame(() => {
-            el.style.transition = 'all 1s ease-out'; //[cite: 44]
-            el.style.transform = 'translateY(-100px)'; //[cite: 44]
-            el.style.opacity = '1'; //[cite: 44]
+            el.style.transition = 'all 1s ease-out';
+            el.style.transform = 'translateY(-100px)';
+            el.style.opacity = '1';
         });
 
         setTimeout(() => {
-            el.style.opacity = '0'; //[cite: 44]
+            el.style.opacity = '0';
             setTimeout(() => {
                 el.style.display = 'none';
                 poolItem.active = false; // Возврат в пул
-            }, 1000); //[cite: 44]
-        }, 1200); //[cite: 44]
+            }, 1000);
+        }, 1200);
     }
 
     /**
      * Показать оффлайн-доход в отдельном попапе с безопасным слушателем
      */
     showOfflinePopup(amount, seconds) {
-        const hours = Math.floor(seconds / 3600); //[cite: 44]
-        const minutes = Math.floor((seconds % 3600) / 60); //[cite: 44]
-        const timeStr = hours > 0 ? `${hours}ч ${minutes}м` : `${minutes}м`; //[cite: 44]
+        const hours = Math.floor(seconds / 3600);
+        const minutes = Math.floor((seconds % 3600) / 60);
+        const timeStr = hours > 0 ? `${hours}ч ${minutes}м` : `${minutes}м`;
         
         const popupId = 'offline-popup';
         const content = `
@@ -251,9 +264,9 @@ class UIManager {
                 <p style="color: #aaa;">за ${timeStr} отсутствия</p>
                 <button id="btn-close-offline" class="ui-interactive" style="background: #ff0055; border: none; color: #fff; padding: 12px 30px; border-radius: 30px; font-size: 18px; margin-top: 10px; cursor: pointer;">Супер!</button>
             </div>
-        `; //[cite: 44]
+        `;
         
-        this.showCustomPopup('Добро пожаловать!', content, popupId); //[cite: 44]
+        this.showCustomPopup('Добро пожаловать!', content, popupId);
 
         // Безопасное назначение события без инлайн-атрибутов
         setTimeout(() => {

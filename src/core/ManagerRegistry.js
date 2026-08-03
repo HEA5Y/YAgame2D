@@ -25,6 +25,20 @@ class ManagerRegistry {
         return manager;
     }
 
+    /**
+     * Получить все зарегистрированные менеджеры
+     * @returns {Object} Объект с парами { имя: менеджер }
+     */
+    getAll() {
+        const result = {};
+        for (const [name, manager] of this.managers.entries()) {
+            if (manager) {
+                result[name] = manager;
+            }
+        }
+        return result;
+    }
+
     has(name) {
         return this.managers.has(name);
     }
