@@ -40,22 +40,22 @@
     <script src="src/core/EventBus.js"></script>
     <script src="src/core/GameConfig.js"></script>
     <script src="src/core/ManagerRegistry.js"></script>
+    <script src="src/core/ManagersInitializer.js"></script>
     <script src="src/core/SaveVersionManager.js"></script>
     <script src="src/core/CanvasManager.js"></script>
     <script src="src/sdk/YandexSDKManager.js"></script>
 
-    <!-- Managers (существующие) -->
+    <!-- Менеджеры (все классы) -->
     <script src="src/managers/TimeManager.js"></script>
     <script src="src/managers/SaveManager.js"></script>
     <script src="src/managers/AudioManager.js"></script>
+    <script src="src/managers/AssetManager.js"></script>
     <script src="src/managers/ResourceManager.js"></script>
     <script src="src/managers/ObjectPoolManager.js"></script>
     <script src="src/managers/EconomyManager.js"></script>
     <script src="src/managers/PrestigeManager.js"></script>
     <script src="src/managers/UIManager.js"></script>
     <script src="src/managers/SceneManager.js"></script>
-
-    <!-- Новые менеджеры -->
     <script src="src/managers/UpgradeManager.js"></script>
     <script src="src/managers/AchievementManager.js"></script>
     <script src="src/managers/QuestManager.js"></script>
@@ -64,13 +64,17 @@
     <script src="src/managers/TweenManager.js"></script>
     <script src="src/managers/ParticleManager.js"></script>
     <script src="src/managers/FactoryManager.js"></script>
-    
-    <!-- Менеджеры для удержания и монетизации -->
     <script src="src/managers/CollectionManager.js"></script>
     <script src="src/managers/BattlePassManager.js"></script>
     <script src="src/managers/DailyRewardsManager.js"></script>
     <script src="src/managers/ChestManager.js"></script>
     <script src="src/managers/JuiceManager.js"></script>
+
+    <!-- Инициализация менеджеров -->
+    <script>
+        // Регистрируем все менеджеры после загрузки всех классов
+        ManagersInitializer.init();
+    </script>
 
     <!-- Данные -->
     <script src="src/data/EconomyData.js"></script>

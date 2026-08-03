@@ -39,7 +39,7 @@ class ManagerRegistry {
         // Порядок инициализации важен: сначала базовые, потом зависимые
         const initOrder = [
             'config', 'logger', 'eventBus', 'sdk', 
-            'audio', 'save', 'time', 'resource', 
+            'audio', 'asset', 'save', 'time', 'resource', 
             'economy', 'factory', 'upgrade', 'collection',
             'quest', 'achievement', 'battlePass', 'dailyRewards',
             'chest', 'prestige', 'world', 'pet', 'booster',

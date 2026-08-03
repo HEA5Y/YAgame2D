@@ -1,1 +1,1 @@
-(src/core/ManagerRegistry.js)
+(src/core/ManagersInitializer.js, src/managers/AssetManager.js)
