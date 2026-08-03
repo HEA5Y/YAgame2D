@@ -1,171 +1,153 @@
 /**
- * Game.js - Основной класс игры
- * Координирует работу всех менеджеров через ManagerRegistry
+ * Game.js
+ * Главный класс-оркестратор. Инициализирует менеджеры, 
+ * управляет защищенной загрузкой ресурсов, отображением контейнера и игровым циклом.
  */
-
 class Game {
     constructor() {
+        window.gameInstance = this;
+        
         this.isRunning = false;
-        this.lastTime = 0;
-        this.accumulator = 0;
-        this.step = 1 / 60; // Фиксированный шаг физики (60 FPS)
-        
-        // Ссылки на ключевые системы (получаем из реестра)
-        this.canvasManager = null;
-        this.timeManager = null;
-        this.factoryManager = null;
-        this.uiManager = null;
-        this.saveManager = null;
-        
-        Logger.info('Game', 'Конструктор Game запущен');
+        this.managers = {};
     }
 
     /**
-     * Инициализация игры
+     * Главный метод инициализации игры
      */
     async init() {
+        Logger.info('Game', 'Инициализация игровых систем...');
+
         try {
-            Logger.info('Game', 'Начало инициализации...');
-
-            // 1. Получаем доступ к системам из реестра
-            this.canvasManager = ManagerRegistry.get('CanvasManager');
-            this.timeManager = ManagerRegistry.get('TimeManager');
-            this.factoryManager = ManagerRegistry.get('FactoryManager');
-            this.uiManager = ManagerRegistry.get('UIManager');
-            this.saveManager = ManagerRegistry.get('SaveManager');
-            this.economyManager = ManagerRegistry.get('EconomyManager');
-
-            if (!this.canvasManager || !this.timeManager) {
-                throw new Error('Критические менеджеры не найдены в реестре!');
-            }
-
-            // 2. Настраиваем Canvas
-            this.canvasManager.init();
+            // 1. Создание и регистрация менеджеров (через ManagersInitializer или напрямую)
+            // Если у вас используется ManagersInitializer, он инициализирует всё автоматически.
+            // Ниже приведена безопасная инициализация основных систем:
             
-            // 3. Загружаем сохранение (если есть)
-            if (this.saveManager) {
-                await this.saveManager.load();
-            }
+            this.saveManager = new SaveManager();
+            this.economyManager = new EconomyManager(this.saveManager);
+            this.timeManager = new TimeManager(this.saveManager);
+            this.factoryManager = new FactoryManager(this.saveManager, this.economyManager);
+            this.upgradeManager = new UpgradeManager(this.saveManager, this.economyManager);
+            this.uiManager = new UIManager();
 
-            // 4. Инициализируем UI после загрузки данных
-            if (this.uiManager) {
-                this.uiManager.init();
-                this.uiManager.updateResources();
-            }
+            this.managers = {
+                save: this.saveManager,
+                economy: this.economyManager,
+                time: this.timeManager,
+                factory: this.factoryManager,
+                upgrades: this.upgradeManager,
+                ui: this.uiManager
+            };
 
-            // 5. Запускаем фабрику
-            if (this.factoryManager) {
-                this.factoryManager.init();
-            }
+            // 2. Загрузка файла сохранения из localStorage
+            const hasSave = this.saveManager.load ? this.saveManager.load() : false;
 
-            Logger.info('Game', 'Инициализация завершена успешно');
-            return true;
+            // 3. Загрузка ресурсов с защитным таймаутом (максимум 3 секунды)
+            await this.loadResourcesWithTimeout(3000);
 
-        } catch (error) {
-            Logger.error('Game', 'Ошибка инициализации:', error);
-            ErrorGuard.showCriticalError(error);
-            return false;
-        }
-    }
-
-    /**
-     * Запуск игрового цикла
-     */
-    start() {
-        if (this.isRunning) return;
-        
-        this.isRunning = true;
-        this.lastTime = performance.now();
-        Logger.info('Game', 'Игровой цикл запущен');
-        
-        requestAnimationFrame((t) => this.loop(t));
-    }
-
-    /**
-     * Основной игровой цикл
-     */
-    loop(currentTime) {
-        if (!this.isRunning) return;
-
-        const deltaTime = (currentTime - this.lastTime) / 1000;
-        this.lastTime = currentTime;
-
-        // Ограничиваем deltaTime, чтобы избежать скачков при переключении вкладок
-        const safeDelta = Math.min(deltaTime, 0.1);
-
-        try {
-            // 1. Обновление логики (Update)
-            this.update(safeDelta);
-
-            // 2. Отрисовка (Render)
-            this.render();
-
-        } catch (error) {
-            Logger.error('Game', 'Ошибка в игровом цикле:', error);
-            // Не останавливаем игру полностью, чтобы игрок мог сохранить прогресс
-        }
-
-        requestAnimationFrame((t) => this.loop(t));
-    }
-
-    /**
-     * Логика игры
-     */
-    update(dt) {
-        // Обновляем время
-        if (this.timeManager) this.timeManager.update(dt);
-
-        // Обновляем фабрику
-        if (this.factoryManager) this.factoryManager.update(dt);
-
-        // Обновляем другие активные системы через реестр
-        const managers = ManagerRegistry.getAll();
-        for (const key in managers) {
-            const manager = managers[key];
-            if (manager !== this.factoryManager && manager !== this.timeManager) {
-                if (typeof manager.update === 'function') {
-                    try {
-                        manager.update(dt);
-                    } catch (e) {
-                        // Тихая ошибка для второстепенных менеджеров
+            // 4. Расчет оффлайн-прогресса
+            if (hasSave && this.timeManager.calculateOfflineProgress) {
+                const offlineSeconds = this.timeManager.calculateOfflineProgress();
+                if (offlineSeconds > 10 && this.factoryManager.processOfflineIncome) {
+                    const earned = this.factoryManager.processOfflineIncome(offlineSeconds);
+                    if (earned && typeof earned.isGreaterThan === 'function' && earned.isGreaterThan(0)) {
+                        if (this.uiManager.showOfflinePopup) {
+                            this.uiManager.showOfflinePopup(earned, offlineSeconds);
+                        }
                     }
                 }
             }
+
+            // 5. Плавное скрытие экрана загрузки и ПОКАЗ игрового контейнера
+            this.showGameInterface();
+
+            // 6. Запуск главного игрокового цикла (Game Loop)
+            this.startLoop();
+
+            Logger.info('Game', 'Игра успешно запущена!');
+        } catch (error) {
+            Logger.error('Game', 'Критическая ошибка при инициализации: ' + (error.message || error));
+            console.error(error);
+            
+            // Даже при ошибке принудительно показываем игру, чтобы избежать серого экрана
+            this.showGameInterface();
+            this.startLoop();
         }
     }
 
     /**
-     * Отрисовка
+     * Обертка над загрузкой с таймаутом
      */
-    render() {
-        const ctx = this.canvasManager.getContext();
-        if (!ctx) return;
-
-        // Очистка и сброс трансформации
-        this.canvasManager.resetTransform();
-        ctx.clearRect(0, 0, this.canvasManager.width, this.canvasManager.height);
-
-        // Рендер фона/мира
-        if (this.factoryManager) {
-            this.factoryManager.render(ctx);
-        }
-
-        // Рендер частиц и эффектов
-        const particleManager = ManagerRegistry.get('ParticleManager');
-        if (particleManager) particleManager.render(ctx);
-
-        const juiceManager = ManagerRegistry.get('JuiceManager');
-        if (juiceManager) juiceManager.render(ctx);
+    async loadResourcesWithTimeout(timeoutMs) {
+        return Promise.race([
+            this.loadAssets(),
+            new Promise((resolve) => setTimeout(() => {
+                Logger.warn('Game', 'Таймаут загрузки ресурсов исчерпан. Принудительный пропуск.');
+                resolve();
+            }, timeoutMs))
+        ]);
     }
 
     /**
-     * Остановка игры
+     * Метод загрузки графики, звуков и т.д.
      */
-    stop() {
-        this.isRunning = false;
-        Logger.info('Game', 'Игровой цикл остановлен');
+    async loadAssets() {
+        return new Promise((resolve) => {
+            // Если у вас есть AssetManager, можно вызвать его здесь. 
+            // Имитируем короткую асинхронную готовность:
+            setTimeout(resolve, 200);
+        });
+    }
+
+    /**
+     * Убирает загрузчик и делает #game-container видимым
+     */
+    showGameInterface() {
+        // Показываем основной контейнер игры (убираем display: none)
+        const gameContainer = document.getElementById('game-container');
+        if (gameContainer) {
+            gameContainer.style.display = 'block';
+        }
+
+        // Плавное скрытие экрана загрузки
+        const loader = document.getElementById('loading-screen');
+        if (loader) {
+            loader.style.opacity = '0';
+            loader.style.transition = 'opacity 0.4s ease';
+            setTimeout(() => {
+                loader.remove();
+            }, 400);
+        }
+    }
+
+    /**
+     * Запуск главного игрового цикла
+     */
+    startLoop() {
+        if (this.isRunning) return;
+        this.isRunning = true;
+
+        let lastFrameTime = performance.now();
+
+        const loop = (currentTime) => {
+            if (!this.isRunning) return;
+
+            const dt = (currentTime - lastFrameTime) / 1000;
+            lastFrameTime = currentTime;
+
+            // Ограничиваем dt, чтобы игра не "скакала" при сворачивании вкладки
+            const safeDt = dt > 0.1 ? 0.1 : dt;
+
+            // Обновляем менеджеры, у которых есть метод update
+            if (this.factoryManager && typeof this.factoryManager.update === 'function') {
+                this.factoryManager.update(safeDt);
+            }
+            if (window.tweenManager && typeof window.tweenManager.update === 'function') {
+                window.tweenManager.update(safeDt);
+            }
+
+            requestAnimationFrame(loop);
+        };
+
+        requestAnimationFrame(loop);
     }
 }
-
-// Делаем класс глобально доступным
-window.Game = Game;

@@ -1,100 +1,54 @@
-/**
- * main.js - Точка входа в приложение
- * Запускает инициализацию после загрузки DOM
- */
+import { Logger } from './utils/Logger.js';
+import { ErrorGuard } from './core/ErrorGuard.js';
+import { YandexSDKManager } from './sdk/YandexSDKManager.js';
+import { ManagersInitializer } from './core/ManagersInitializer.js';
+import { Game } from './core/Game.js'; // Или Engine.js, в зависимости от того, кто у тебя стартует цикл
 
-document.addEventListener('DOMContentLoaded', async () => {
-    Logger.info('Main', 'DOM загружен, старт приложения...');
-
+async function bootstrap() {
     try {
-        // 1. Показываем экран загрузки
-        const loadingScreen = document.getElementById('loading-screen');
-        const gameContainer = document.getElementById('game-container');
-        const progressFill = document.querySelector('.progress-fill');
-        
-        if (loadingScreen) {
-            loadingScreen.style.display = 'flex';
-        }
-
-        // Эмуляция прогресса загрузки
-        let progress = 0;
-        const interval = setInterval(() => {
-            progress += Math.random() * 15;
-            if (progress > 90) progress = 90;
-            if (progressFill) {
-                progressFill.style.width = `${progress}%`;
-            }
-        }, 200);
-
-        // 2. Инициализируем менеджеры (через ManagersInitializer)
-        if (typeof ManagersInitializer !== 'undefined') {
-            await ManagersInitializer.init();
-            // Создаем зависимые менеджеры (Factory и т.д.)
-            ManagersInitializer.initDependentManagers();
-        } else {
-            throw new Error('ManagersInitializer не найден! Проверьте порядок скриптов.');
-        }
-
-        // 3. Создаем экземпляр игры
-        if (typeof Game === 'undefined') {
-            throw new Error('Класс Game не найден!');
+        // 1. Инициализируем глобальный перехватчик ошибок (если он нужен на старте)
+        if (typeof ErrorGuard !== 'undefined' && ErrorGuard.init) {
+            ErrorGuard.init();
         }
         
-        window.gameInstance = new Game();
+        Logger.info('Начинаем инициализацию приложения...');
 
-        // 4. Инициализируем игру
-        const success = await window.gameInstance.init();
+        // 2. Инициализация Yandex SDK (Решение Проблем №1, №3)
+        // Важно: мы дожидаемся (await) полной загрузки SDK перед тем, как идти дальше
+        window.yandexSDK = new YandexSDKManager();
+        await window.yandexSDK.initialize();
+        Logger.info('Yandex SDK готов.');
 
-        if (!success) {
-            throw new Error('Инициализация игры вернула false');
+        // 3. Инициализация всех менеджеров (Решение Проблемы №2)
+        // Теперь внутри ManagersInitializer.js переменная window.yandexSDK точно существует
+        await ManagersInitializer.init();
+        Logger.info('Менеджеры инициализированы.');
+
+        // 4. Создание и старт основного класса игры
+        const game = new Game();
+        
+        // В зависимости от того, как написан твой Game.js:
+        if (typeof game.initialize === 'function') {
+            await game.initialize();
+        }
+        
+        if (typeof game.start === 'function') {
+            game.start();
         }
 
-        // 5. Скрываем загрузку, показываем игру
-        clearInterval(interval);
-        if (progressFill) progressFill.style.width = '100%';
-        
-        setTimeout(() => {
-            if (loadingScreen) {
-                loadingScreen.style.opacity = '0';
-                loadingScreen.style.transition = 'opacity 0.5s ease';
-                setTimeout(() => {
-                    loadingScreen.style.display = 'none';
-                    if (gameContainer) gameContainer.style.display = 'block';
-                    
-                    // 6. Запускаем цикл
-                    window.gameInstance.start();
-                    Logger.info('Main', 'Игра запущена успешно!');
-                }, 500);
-            } else {
-                if (gameContainer) gameContainer.style.display = 'block';
-                window.gameInstance.start();
-            }
-        }, 500);
+        Logger.info('Игра успешно запущена!');
 
     } catch (error) {
-        Logger.error('Main', 'Критическая ошибка запуска:', error);
-        
-        // Останавливаем эмуляцию прогресса
-        const progressFill = document.querySelector('.progress-fill');
-        if (progressFill) progressFill.style.width = '100%';
-        progressFill.style.backgroundColor = '#ff4444';
-
-        // Показываем ошибку через Guard
-        if (typeof ErrorGuard !== 'undefined') {
-            ErrorGuard.showCriticalError(error);
+        // Если что-то упадет на этапе инициализации, игра не зависнет молча
+        if (Logger && Logger.error) {
+            Logger.error('Критическая ошибка при старте игры:', error);
         } else {
-            alert('Критическая ошибка: ' + error.message);
+            console.error('Критическая ошибка при старте игры:', error);
         }
     }
-});
+}
 
-// Обработка видимости вкладки (пауза при сворачивании)
-document.addEventListener('visibilitychange', () => {
-    if (document.hidden) {
-        Logger.info('Main', 'Вкладка скрыта, игра на паузе');
-        if (window.gameInstance) window.gameInstance.stop();
-    } else {
-        Logger.info('Main', 'Вкладка активна, возобновление');
-        if (window.gameInstance) window.gameInstance.start();
-    }
+// Запускаем весь процесс только после того, как DOM-дерево будет готово
+window.addEventListener('DOMContentLoaded', () => {
+    bootstrap();
 });

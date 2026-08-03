@@ -60,9 +60,9 @@
         </div>
     </div>
 
-    <!-- СКРИПТЫ (Строгий порядок загрузки!) -->
+    <!-- СКРИПТЫ (СТРОГИЙ ПОРЯДОК!) -->
     
-    <!-- 1. Утилиты и ядро -->
+    <!-- 1. Утилиты и Ядро -->
     <script src="src/utils/Logger.js"></script>
     <script src="src/utils/MathUtils.js"></script>
     <script src="src/core/EventBus.js"></script>
@@ -72,19 +72,21 @@
     <script src="src/core/SaveVersionManager.js"></script>
     <script src="src/core/ManagerRegistry.js"></script>
 
-    <!-- 2. Данные (ДО менеджеров!) -->
+    <!-- 2. Данные (ОБЯЗАТЕЛЬНО ДО МЕНЕДЖЕРОВ) -->
     <script src="src/data/EconomyData.js"></script>
     <script src="src/data/UpgradeData.js"></script>
     <script src="src/data/AchievementData.js"></script>
     <script src="src/data/QuestData.js"></script>
     <script src="src/data/EventData.js"></script>
+    <script src="src/data/CollectionData.js"></script> <!-- Если есть -->
 
     <!-- 3. Сущности -->
     <script src="src/entities/FloatingText.js"></script>
     <script src="src/entities/FactoryLine.js"></script>
     <script src="src/entities/Worker.js"></script>
+    <script src="src/entities/Particle.js"></script> <!-- Если есть -->
 
-    <!-- 4. Менеджеры -->
+    <!-- 4. Менеджеры (Базовые) -->
     <script src="src/managers/AssetManager.js"></script>
     <script src="src/managers/TimeManager.js"></script>
     <script src="src/managers/AudioManager.js"></script>
@@ -92,8 +94,13 @@
     <script src="src/managers/TweenManager.js"></script>
     <script src="src/managers/ParticleManager.js"></script>
     <script src="src/managers/JuiceManager.js"></script>
+
+    <!-- 5. Менеджеры (Логика) -->
     <script src="src/managers/EconomyManager.js"></script>
     <script src="src/managers/ResourceManager.js"></script>
+    <script src="src/managers/SaveManager.js"></script>
+    
+    <!-- 6. Менеджеры (Зависимые от базовых) -->
     <script src="src/managers/FactoryManager.js"></script>
     <script src="src/managers/UpgradeManager.js"></script>
     <script src="src/managers/AchievementManager.js"></script>
@@ -104,15 +111,17 @@
     <script src="src/managers/BattlePassManager.js"></script>
     <script src="src/managers/DailyRewardsManager.js"></script>
     <script src="src/managers/PrestigeManager.js"></script>
+    <script src="src/managers/OfflineManager.js"></script>
     <script src="src/managers/SceneManager.js"></script>
     <script src="src/managers/UIManager.js"></script>
-    <script src="src/managers/SaveManager.js"></script>
-    <script src="src/managers/OfflineManager.js"></script>
     <script src="src/managers/YandexSDKManager.js"></script>
 
-    <!-- 5. Инициализаторы и Игра -->
+    <!-- 7. Системные классы -->
     <script src="src/core/ManagersInitializer.js"></script>
+    <script src="src/core/Engine.js"></script>
     <script src="src/core/Game.js"></script>
+    
+    <!-- 8. Точка входа -->
     <script src="src/main.js"></script>
 </body>
 </html>

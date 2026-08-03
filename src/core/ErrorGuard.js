@@ -1,98 +1,91 @@
 /**
- * ErrorGuard - Глобальная система защиты от ошибок
- * Перехватывает все критические сбои, предотвращает "белый экран"
- * и выводит понятное сообщение пользователю.
+ * ErrorGuard - Глобальная защита от падений игры
  */
+
 class ErrorGuard {
-    static init() {
-        // Перехват глобальных ошибок
-        window.onerror = (msg, url, line, col, error) => {
-            console.error('🛑 GLOBAL ERROR CAUGHT:', error || msg);
-            this.showFatalScreen(msg, error);
-            return true; // Предотвращаем стандартное поведение браузера
-        };
-
-        // Перехват необработанных Promise rejection
-        window.onunhandledrejection = (event) => {
-            console.error('🛑 UNHANDLED PROMISE REJECTION:', event.reason);
-            this.showFatalScreen('Ошибка асинхронной операции', event.reason);
-            event.preventDefault();
-        };
-
-        console.log('✅ ErrorGuard initialized');
+    constructor() {
+        this.hasCriticalError = false;
+        this._attachGlobalHandlers();
     }
 
-    static showFatalScreen(message, errorObj) {
-        if (document.getElementById('fatal-error-screen')) return;
+    /**
+     * Показать экран критической ошибки
+     */
+    showCriticalError(error) {
+        if (this.hasCriticalError) return;
+        this.hasCriticalError = true;
+
+        console.error('[ErrorGuard] Критическая ошибка:', error);
 
         const overlay = document.createElement('div');
-        overlay.id = 'fatal-error-screen';
+        overlay.id = 'critical-error-overlay';
         overlay.style.cssText = `
             position: fixed; top: 0; left: 0; width: 100%; height: 100%;
-            background: rgba(0, 0, 0, 0.95); z-index: 99999;
-            display: flex; flex-direction: column; justify-content: center; align-items: center;
-            color: #fff; font-family: sans-serif; text-align: center; padding: 20px;
+            background: rgba(0,0,0,0.95); z-index: 99999;
+            display: flex; flex-direction: column;
+            align-items: center; justify-content: center;
+            color: white; font-family: sans-serif; text-align: center;
+            padding: 20px; box-sizing: border-box;
         `;
 
         const title = document.createElement('h1');
-        title.textContent = '⚠️ Произошла критическая ошибка';
+        title.textContent = '😱 Ошибка загрузки!';
         title.style.color = '#ff4444';
         title.style.marginBottom = '20px';
 
-        const desc = document.createElement('p');
-        desc.textContent = message || 'Неизвестная ошибка';
-        desc.style.fontSize = '18px';
-        desc.style.marginBottom = '10px';
-        desc.style.maxWidth = '600px';
+        const msg = document.createElement('div');
+        msg.textContent = error.message || 'Неизвестная ошибка';
+        msg.style.fontSize = '18px';
+        msg.style.marginBottom = '10px';
+        msg.style.maxWidth = '600px';
 
-        const techDetails = document.createElement('pre');
-        techDetails.style.cssText = `
-            background: #222; padding: 15px; border-radius: 5px;
-            font-size: 12px; color: #0f0; overflow: auto; max-width: 80%;
-            max-height: 200px; text-align: left; margin-top: 20px;
+        const stack = document.createElement('pre');
+        stack.textContent = error.stack || 'Нет стека вызовов';
+        stack.style.cssText = `
+            background: #222; padding: 15px; border-radius: 8px;
+            font-size: 12px; overflow: auto; max-width: 100%;
+            max-height: 200px; text-align: left; color: #ff8888;
         `;
-        techDetails.textContent = errorObj ? (errorObj.stack || errorObj.toString()) : 'No stack trace';
 
-        const reloadBtn = document.createElement('button');
-        reloadBtn.textContent = '🔄 Попробовать снова';
-        reloadBtn.style.cssText = `
-            margin-top: 30px; padding: 15px 30px; font-size: 18px;
-            background: #4CAF50; color: white; border: none; border-radius: 5px;
-            cursor: pointer; transition: background 0.3s;
+        const btn = document.createElement('button');
+        btn.textContent = '🔄 Перезагрузить';
+        btn.style.cssText = `
+            margin-top: 20px; padding: 15px 30px; font-size: 18px;
+            background: #4caf50; color: white; border: none;
+            border-radius: 8px; cursor: pointer;
         `;
-        reloadBtn.onmouseover = () => reloadBtn.style.background = '#45a049';
-        reloadBtn.onmouseout = () => reloadBtn.style.background = '#4CAF50';
-        reloadBtn.onclick = () => window.location.reload();
+        btn.onclick = () => location.reload();
 
         overlay.appendChild(title);
-        overlay.appendChild(desc);
-        overlay.appendChild(techDetails);
-        overlay.appendChild(reloadBtn);
-
-        // Удаляем лоадер если есть
-        const loader = document.getElementById('loading-screen');
-        if (loader) loader.style.display = 'none';
-
+        overlay.appendChild(msg);
+        overlay.appendChild(stack);
+        overlay.appendChild(btn);
         document.body.appendChild(overlay);
     }
 
-    static safeExecute(fn, context, ...args) {
-        try {
-            return fn.apply(context, args);
-        } catch (e) {
-            console.error('❌ SafeExecute failed:', e);
-            throw e; // Пробрасываем дальше, чтобы перехватил window.onerror
-        }
+    /**
+     * Алиас для совместимости
+     */
+    handleCriticalError(error) {
+        this.showCriticalError(error);
     }
 
-    static safeGet(obj, path, defaultValue = null) {
-        try {
-            return path.split('.').reduce((prev, curr) => prev ? prev[curr] : undefined, obj) ?? defaultValue;
-        } catch (e) {
-            return defaultValue;
-        }
+    _attachGlobalHandlers() {
+        window.onerror = (msg, source, line, col, error) => {
+            if (!this.hasCriticalError) {
+                // Не показываем полный экран для мелких ошибок скриптов, только логируем
+                console.error(`[Global Error] ${msg} (${source}:${line})`);
+            }
+            return false;
+        };
+
+        window.onunhandledrejection = (event) => {
+            console.error('[Unhandled Rejection]', event.reason);
+            // Можно раскомментировать, если нужно падение на любых промисах
+            // this.showCriticalError(event.reason); 
+        };
     }
 }
 
-// Авто-инициализация при загрузке скрипта
-ErrorGuard.init();
+// Экспортируем в глобальную область
+window.ErrorGuard = new ErrorGuard();

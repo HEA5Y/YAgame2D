@@ -10,7 +10,12 @@ class ManagersInitializer {
         registry.register('config', GameConfig);
         registry.register('logger', Logger);
         registry.register('eventBus', EventBus);
-        registry.register('sdk', yandexSDK);
+        if (window.yandexSDK) {
+            registry.register('sdk', window.yandexSDK);
+        } else {
+            console.warn('[ManagersInitializer] Yandex SDK не инициализирован');
+            registry.register('sdk', null);
+        }
         
         // Создаём и регистрируем менеджеры (без зависимостей в конструкторе)
         registry.register('audio', new AudioManager());
