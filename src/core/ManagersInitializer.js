@@ -12,7 +12,7 @@ class ManagersInitializer {
         registry.register('eventBus', EventBus);
         registry.register('sdk', yandexSDK);
         
-        // Создаём и регистрируем менеджеры
+        // Создаём и регистрируем менеджеры (без зависимостей в конструкторе)
         registry.register('audio', new AudioManager());
         registry.register('asset', new AssetManager());
         registry.register('save', new SaveManager());
@@ -32,7 +32,9 @@ class ManagersInitializer {
         registry.register('offline', new OfflineManager());
         registry.register('tween', new TweenManager());
         registry.register('particle', new ParticleManager());
-        registry.register('factory', new FactoryManager());
+        
+        // FactoryManager создаётся позже, после установки зависимостей
+        // registry.register('factory', new FactoryManager()); // Отложено
         
         // Менеджеры удержания и монетизации
         registry.register('collection', new CollectionManager());
@@ -58,6 +60,30 @@ class ManagersInitializer {
         });
         
         console.log('[ManagersInitializer] Все менеджеры зарегистрированы:', registry.count());
+    }
+    
+    /**
+     * Инициализация менеджеров с зависимостями
+     * Вызывается после регистрации всех базовых менеджеров
+     */
+    static initDependentManagers() {
+        const registry = window.ManagerRegistry;
+        
+        // Получаем зависимости для FactoryManager
+        const economyManager = registry.get('economy');
+        const saveManager = registry.get('save');
+        
+        // Создаём и регистрируем FactoryManager с зависимостями
+        const factoryManager = new FactoryManager(economyManager, saveManager);
+        registry.register('factory', factoryManager);
+        
+        // Передаём зависимости в другие менеджеры, если нужно
+        const offlineManager = registry.get('offline');
+        if (offlineManager && typeof offlineManager.setDependencies === 'function') {
+            offlineManager.setDependencies(factoryManager, economyManager);
+        }
+        
+        console.log('[ManagersInitializer] Зависимые менеджеры инициализированы');
     }
 }
 
