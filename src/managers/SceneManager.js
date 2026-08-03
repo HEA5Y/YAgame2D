@@ -95,16 +95,37 @@ class MainGameScene {
     exit() {}
     update(dt) {
         // Обновление фабричных линий и логики геймплея
+        const game = window.gameInstance;
+        if (game && game.managers && game.managers.factory) {
+            game.managers.factory.update(dt);
+        }
     }
     render(ctx) {
         // Рендер фабрики, конвейеров и существ на Canvas
+        const game = window.gameInstance;
+        
+        // Рендерим фон сцены
         ctx.fillStyle = '#141923';
-        ctx.font = 'bold 36px Arial';
+        ctx.fillRect(0, 0, GameConfig.ENGINE.CANVAS_LOGICAL_WIDTH, GameConfig.ENGINE.CANVAS_LOGICAL_HEIGHT);
+        
+        // Заголовок
         ctx.fillStyle = '#ffffff';
+        ctx.font = 'bold 36px Arial';
         ctx.textAlign = 'center';
-        ctx.fillText('Brainrot Factory Evolution', 540, 200);
-        ctx.font = '24px Arial';
-        ctx.fillStyle = '#8888aa';
-        ctx.fillText('Фабрика мемных существ работает!', 540, 260);
+        ctx.fillText('🧠 Brainrot Factory Evolution', 540, 80);
+        
+        // Рендерим фабрику
+        if (game && game.managers && game.managers.factory) {
+            game.managers.factory.render(ctx);
+        }
+        
+        // Отображение ресурсов вверху экрана
+        if (game && game.managers && game.managers.economy) {
+            const currency = game.managers.economy.getBalance('coins');
+            ctx.fillStyle = '#ffdd44';
+            ctx.font = 'bold 28px Arial';
+            ctx.textAlign = 'left';
+            ctx.fillText(`💰 ${currency.format()}`, 20, 50);
+        }
     }
 }
