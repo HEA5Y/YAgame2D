@@ -27,6 +27,24 @@ class CanvasManager {
         this.setupResizeHandler();
         this.resize();
         
+        // Небольшая отладочная отрисовка, чтобы убедиться, что canvas видим и рендер работает
+        try {
+            if (this.ctx) {
+                this.ctx.save();
+                this.ctx.fillStyle = '#112233';
+                this.ctx.fillRect(0, 0, GameConfig.ENGINE.CANVAS_LOGICAL_WIDTH, 80);
+                this.ctx.fillStyle = '#ffdd44';
+                this.ctx.font = 'bold 28px Arial';
+                this.ctx.textAlign = 'center';
+                this.ctx.fillText('Canvas initialized — test render', GameConfig.ENGINE.CANVAS_LOGICAL_WIDTH / 2, 48);
+                this.ctx.restore();
+            } else {
+                console.warn('CanvasManager: context is null after init');
+            }
+        } catch (e) {
+            console.error('CanvasManager debug draw failed:', e);
+        }
+
         Logger.info('CanvasManager', 'CanvasManager initialized');
     }
 
@@ -70,23 +88,42 @@ class CanvasManager {
         this.scale = Math.max(GameConfig.ENGINE.MIN_SCALE, 
                              Math.min(GameConfig.ENGINE.MAX_SCALE, this.scale));
 
-        // Устанавливаем размеры canvas
-        this.canvas.width = parentWidth;
-        this.canvas.height = parentHeight;
-        
+        // Учёт devicePixelRatio для чёткости на HiDPI дисплеях
+        const DPR = window.devicePixelRatio || 1;
+
+        // Размеры в CSS-пикселях (то, что видит браузер)
         this.width = parentWidth;
         this.height = parentHeight;
-        
-        // ВАЖНО: используем setTransform вместо accumulate scale
-        // Это решает проблему накопительного масштабирования
+
+        // Размеры отображаемой логической области в CSS-пикселях
+        const displayWidth = Math.round(logicalWidth * this.scale);
+        const displayHeight = Math.round(logicalHeight * this.scale);
+
+        // Размеры backing buffer в реальных пикселях (для чёткости)
+        const backingWidth = Math.max(1, Math.round(displayWidth * DPR));
+        const backingHeight = Math.max(1, Math.round(displayHeight * DPR));
+
+        // Устанавливаем размеры backing buffer
+        this.canvas.width = backingWidth;
+        this.canvas.height = backingHeight;
+
+        // Устанавливаем CSS размеры равными логической отображаемой области
+        this.canvas.style.width = `${displayWidth}px`;
+        this.canvas.style.height = `${displayHeight}px`;
+
+        // Центрируем canvas в родителе
+        this.canvas.style.position = 'absolute';
+        this.canvas.style.left = '50%';
+        this.canvas.style.top = '50%';
+        this.canvas.style.transform = 'translate(-50%, -50%)';
+
+        // Сбрасываем трансформации и применяем масштаб с учётом DPR (без смещений)
         this.resetTransform();
-        
-        // Применяем новый transform
         this.ctx.setTransform(
-            this.scale, 0,
-            0, this.scale,
-            (this.width - logicalWidth * this.scale) / 2,
-            (this.height - logicalHeight * this.scale) / 2
+            this.scale * DPR, 0,
+            0, this.scale * DPR,
+            0,
+            0
         );
 
         // Обновляем кэш

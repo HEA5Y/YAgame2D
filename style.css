@@ -172,27 +172,26 @@ html, body {
     top: 0;
     left: 0;
     width: 100%;
-    height: 100%;
+    height: auto;
     pointer-events: none;
     display: flex;
     flex-direction: column;
     justify-content: space-between;
-    padding: 20px;
-    z-index: 100;
+    padding: 16px 16px 0 16px;
+    z-index: 110;
 }
 
 /* HUD Top Panel (из index.html) */
 .hud-top {
-    position: absolute;
-    top: 0;
-    left: 0;
+    position: relative;
     width: 100%;
     display: flex;
     justify-content: space-between;
     align-items: center;
-    padding: 16px 24px;
+    padding: 8px 16px;
+    height: 72px; /* reserve space for HUD so main panel doesn't overlap */
     pointer-events: none;
-    z-index: 100;
+    z-index: 110;
 }
 
 .resource-panel {
@@ -251,14 +250,14 @@ html, body {
     display: flex;
     justify-content: space-around;
     align-items: center;
-    background: var(--ui-panel-bg);
-    border: 2px solid var(--ui-panel-border);
-    border-radius: var(--border-radius-lg) var(--border-radius-lg) 0 0;
+    background: rgba(13, 15, 18, 0.96);
+    border: 2px solid rgba(255,255,255,0.08);
+    border-radius: 20px 20px 0 0;
     padding: 12px;
     pointer-events: auto;
-    box-shadow: var(--shadow-lg);
+    box-shadow: 0 -6px 24px rgba(0,0,0,0.25);
     backdrop-filter: blur(10px);
-    z-index: 100;
+    z-index: 120;
 }
 
 .resource-card {
@@ -398,6 +397,195 @@ html, body {
     box-shadow: var(--shadow-md);
     backdrop-filter: blur(5px);
 }
+
+/* Popup overlay and cards used by UIManager */
+.ui-popup-overlay {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    z-index: 1000;
+    pointer-events: auto;
+    background: rgba(0,0,0,0.35);
+}
+
+.ui-popup-card {
+    background: var(--ui-panel-bg);
+    border: 2px solid var(--ui-panel-border);
+    border-radius: 16px;
+    padding: 20px;
+    color: var(--text-color);
+    box-shadow: var(--shadow-lg);
+    min-width: 320px;
+    max-width: 90%;
+}
+
+/* Main panel content */
+/* Side (collapsible) panel */
+#side-panel {
+    pointer-events: auto;
+    position: fixed; /* anchor to viewport to avoid layout shifts */
+    right: 0;
+    top: 88px;
+    width: 380px;
+    max-width: 45%;
+    height: calc(100% - 160px);
+    z-index: 220;
+    transition: transform 0.28s ease, opacity 0.28s ease;
+    transform: translateX(0);
+}
+
+.side-panel.collapsed { transform: translateX(calc(100% - 46px)); opacity: 1; }
+
+.side-panel-inner {
+    width: 100%;
+    height: 100%;
+    padding: 12px;
+    background: rgba(10,12,16,0.45);
+    border-left: 1px solid rgba(255,255,255,0.04);
+    box-shadow: -8px 0 30px rgba(0,0,0,0.6);
+    border-radius: 12px 0 0 12px;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    backdrop-filter: blur(6px);
+}
+
+.side-panel-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.side-panel-title { color: var(--text-color); font-weight: 700; }
+.side-panel-close { background: transparent; border: none; color: var(--text-color); cursor: pointer; font-size: 18px; }
+
+.side-panel-panel { overflow: auto; }
+
+.side-panel-handle {
+    position: absolute;
+    left: -46px;
+    top: 24px;
+    width: 42px;
+    height: 42px;
+    background: var(--ui-panel-bg);
+    border: 2px solid var(--ui-panel-border);
+    border-radius: 12px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    box-shadow: 0 6px 16px rgba(0,0,0,0.4);
+}
+
+/* Ensure handle remains visible on small screens */
+@media (max-width: 700px) {
+    .side-panel { width: 320px; top: 72px; }
+    .side-panel.collapsed { transform: translateX(calc(100% - 42px)); }
+    .side-panel-handle { left: -42px; }
+}
+
+.ui-panel-content {
+    display: none;
+    background: rgba(18,22,31,0.35); /* make panels semi-transparent so canvas shows through */
+    border: 1px solid rgba(255,255,255,0.04);
+    border-radius: 16px;
+    padding: 12px;
+    width: 100%;
+    height: auto;
+    max-height: 80vh;
+    overflow: auto;
+    box-shadow: 0 6px 18px rgba(0,0,0,0.25);
+    backdrop-filter: blur(6px);
+}
+
+.ui-panel-content h2 {
+    margin: 0 0 12px 0;
+    font-size: 22px;
+    color: #ffffff;
+}
+
+.ui-panel-grid {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 10px;
+}
+
+.ui-card {
+    background: linear-gradient(135deg, rgba(255,255,255,0.08) 0%, rgba(255,255,255,0.03) 100%);
+    border: 1px solid rgba(255,255,255,0.12);
+    border-radius: 14px;
+    padding: 12px;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    box-shadow: inset 0 1px 0 rgba(255,255,255,0.04);
+    animation: uiCardIn 0.25s ease;
+}
+
+@keyframes uiCardIn {
+    from { opacity: 0; transform: translateY(10px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+
+.ui-card-title {
+    font-weight: 700;
+    color: #fff;
+    font-size: 16px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.ui-card .muted {
+    color: var(--text-secondary);
+    font-size: 13px;
+}
+
+.ui-action-btn {
+    align-self: flex-start;
+    border: none;
+    border-radius: 999px;
+    padding: 8px 12px;
+    background: linear-gradient(135deg, var(--ui-accent) 0%, #ff5a1f 100%);
+    color: #fff;
+    cursor: pointer;
+    font-weight: 700;
+    box-shadow: 0 6px 16px rgba(255,0,85,0.2);
+    transition: transform 0.18s ease, box-shadow 0.18s ease;
+}
+
+.ui-action-btn:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 8px 18px rgba(255,0,85,0.28);
+}
+
+.ui-action-btn.secondary {
+    background: linear-gradient(135deg, #2a3548 0%, #1f2633 100%);
+    margin-left: 8px;
+}
+
+.ui-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 4px 8px;
+    border-radius: 999px;
+    background: rgba(255,255,255,0.08);
+    font-size: 12px;
+    color: #fff;
+}
+
+.toggle-row { display: flex; justify-content: space-between; align-items: center; gap: 8px; margin: 8px 0; }
+.toggle-row input[type=range] { width: 200px; }
+
+/* Settings modal specific overrides */
+#settings-modal { min-width: 360px; }
+#settings-modal-overlay { background: rgba(0,0,0,0.45); }
 
 .notification.show {
     transform: translateY(0);

@@ -130,3 +130,12 @@ class ManagerRegistry {
 
 // Глобальный экземпляр (единственная точка доступа)
 window.ManagerRegistry = new ManagerRegistry();
+// Обеспечиваем обратную совместимость: некоторые модули обращаются к
+// `ManagerRegistry.get(...)` напрямую (без window.). Создадим глобальный
+// идентификатор `ManagerRegistry`, указывающий на тот же экземпляр.
+try {
+    ManagerRegistry = window.ManagerRegistry;
+} catch (e) {
+    // В строгом режиме присваивание глобального идентификатора может упасть,
+    // в этом случае код должен обращаться через window.ManagerRegistry.
+}
