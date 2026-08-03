@@ -292,7 +292,7 @@ html, body {
     justify-content: space-around;
     align-items: center;
     width: 100%;
-    background: var(--ui-panel-bg);
+    background: radial-gradient(circle at center, #1a1a2e 0%, #0f0f1a 100%);
     border: 2px solid var(--ui-panel-border);
     border-radius: var(--border-radius-lg);
     padding: 12px;
@@ -302,7 +302,7 @@ html, body {
 }
 
 .nav-btn {
-    background: linear-gradient(135deg, #1a1f2b 0%, #2a3548 100%);
+    background: radial-gradient(circle at center, #1a1a2e 0%, #0f0f1a 100%);
     border: 2px solid var(--ui-panel-border);
     border-radius: var(--border-radius-md);
     color: var(--text-color);
