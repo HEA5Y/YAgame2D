@@ -81,6 +81,88 @@ class UIManager {
         
         this.elements.coinsText = document.getElementById('hud-coins');
         this.elements.gemsText = document.getElementById('hud-gems');
+        
+        // Добавляем обработчики событий для кнопок навигации
+        this.setupNavButtonListeners();
+    }
+    
+    /**
+     * Настройка обработчиков событий для кнопок навигации
+     */
+    setupNavButtonListeners() {
+        // Обработчики для кнопок ui-nav-btn (из UIManager)
+        const navButtons = document.querySelectorAll('.ui-nav-btn');
+        navButtons.forEach(btn => {
+            btn.addEventListener('click', () => {
+                const target = btn.getAttribute('data-target');
+                this.handleNavClick(target);
+            });
+        });
+        
+        // Обработчики для кнопок nav-btn (из index.html)
+        const tabButtons = document.querySelectorAll('.nav-btn');
+        tabButtons.forEach(btn => {
+            btn.addEventListener('click', () => {
+                const tab = btn.getAttribute('data-tab');
+                this.handleTabClick(tab, btn);
+            });
+        });
+    }
+    
+    /**
+     * Обработка клика по кнопке навигации (ui-nav-btn)
+     */
+    handleNavClick(target) {
+        Logger.info('UIManager', 'Навигация: ' + target);
+        
+        // Здесь можно добавить логику переключения вкладок/сцен
+        switch(target) {
+            case 'factory':
+                // Показать завод
+                break;
+            case 'upgrades':
+                // Показать улучшения
+                break;
+            case 'research':
+                // Показать науку
+                break;
+            case 'collection':
+                // Показать коллекцию мемов
+                break;
+        }
+    }
+    
+    /**
+     * Обработка клика по кнопке вкладки (nav-btn из index.html)
+     */
+    handleTabClick(tab, clickedBtn) {
+        Logger.info('UIManager', 'Вкладка: ' + tab);
+        
+        // Удаляем активный класс со всех кнопок
+        document.querySelectorAll('.nav-btn').forEach(btn => {
+            btn.classList.remove('active');
+        });
+        
+        // Добавляем активный класс нажатой кнопке
+        if (clickedBtn) {
+            clickedBtn.classList.add('active');
+        }
+        
+        // Здесь можно добавить логику переключения сцен
+        switch(tab) {
+            case 'factory':
+                // Активировать сцену завода
+                break;
+            case 'upgrades':
+                // Активировать сцену улучшений
+                break;
+            case 'collection':
+                // Активировать сцену коллекции
+                break;
+            case 'quest':
+                // Активировать сцену заданий
+                break;
+        }
     }
 
     /**
