@@ -69,22 +69,30 @@ class ManagerRegistry {
         const activeManagers = ['time', 'factory', 'quest', 'battlePass', 'dailyRewards', 'chest', 'booster', 'pet', 'offline'];
         
         for (const name of activeManagers) {
-            const manager = this.get(name);
+            const manager = this.managers.get(name); // Прямой доступ к Map, без проверки через get()
             if (manager && typeof manager.update === 'function') {
-                manager.update(deltaTime);
+                try {
+                    manager.update(deltaTime);
+                } catch (error) {
+                    console.error(`❌ Update error in ${name}:`, error);
+                }
             }
         }
     }
 
     renderAll(ctx) {
-        if (!this.initialized) return;
+        if (!this.initialized || !ctx) return;
 
         const renderOrder = ['world', 'factory', 'pet', 'particle', 'ui'];
         
         for (const name of renderOrder) {
-            const manager = this.get(name);
+            const manager = this.managers.get(name); // Прямой доступ к Map, без проверки через get()
             if (manager && typeof manager.render === 'function') {
-                manager.render(ctx);
+                try {
+                    manager.render(ctx);
+                } catch (error) {
+                    console.error(`❌ Render error in ${name}:`, error);
+                }
             }
         }
     }

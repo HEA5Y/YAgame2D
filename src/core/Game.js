@@ -24,7 +24,10 @@ class Game {
             this._startGame();
         } catch (error) {
             Logger.error('Game', 'Критическая ошибка:', error);
-            this._handleFatalError(error);
+            // ErrorGuard уже перехватит ошибку через window.onerror, 
+            // но на всякий случай покажем детали в консоли
+            console.error('FATAL BOOTSTRAP ERROR:', error);
+            throw error; // Пробрасываем дальше для перехвата ErrorGuard
         }
     }
 
@@ -246,13 +249,30 @@ class Game {
     }
 
     update(dt) {
-        if (this.registry) this.registry.updateAll(dt);
+        try {
+            if (this.registry && typeof this.registry.updateAll === 'function') {
+                this.registry.updateAll(dt);
+            }
+        } catch (error) {
+            console.error('❌ Update error:', error);
+            // Не пробрасываем ошибку дальше чтобы не ломать весь цикл
+        }
     }
 
     render() {
-        this.ctx.fillStyle = '#0d0f12';
-        this.ctx.fillRect(0, 0, GameConfig.ENGINE.CANVAS_LOGICAL_WIDTH, GameConfig.ENGINE.CANVAS_LOGICAL_HEIGHT);
-        if (this.registry) this.registry.renderAll(this.ctx);
+        try {
+            if (!this.ctx || !this.registry) return;
+            
+            this.ctx.fillStyle = '#0d0f12';
+            this.ctx.fillRect(0, 0, GameConfig.ENGINE.CANVAS_LOGICAL_WIDTH, GameConfig.ENGINE.CANVAS_LOGICAL_HEIGHT);
+            
+            if (typeof this.registry.renderAll === 'function') {
+                this.registry.renderAll(this.ctx);
+            }
+        } catch (error) {
+            console.error('❌ Render error:', error);
+            // Не пробрасываем ошибку дальше чтобы не ломать весь цикл
+        }
     }
     
     handleCanvasClick(event) {
