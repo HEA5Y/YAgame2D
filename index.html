@@ -22,10 +22,11 @@
         <div id="popup-layer"></div>
         <div id="loading-screen">
             <div class="loader-container">
+                <div class="loader-logo">🧠 BRAINROT FACTORY</div>
                 <div class="loader-bar-bg">
                     <div id="loader-bar-fill" class="loader-bar-fill"></div>
                 </div>
-                <div id="loader-text" class="loader-text">Инициализация ядра... 0%</div>
+                <div id="loader-text" class="loader-text">Загрузка...</div>
             </div>
         </div>
     </div>
@@ -78,19 +79,6 @@
     <script src="src/core/Game.js"></script>
     
     <!-- Application Entry Point -->
-    <script>
-        window.addEventListener('load', () => {
-            const game = new Game();
-            game.bootstrap();
-            
-            // Обработка кликов по canvas
-            game.canvas.addEventListener('click', (e) => game.handleCanvasClick(e));
-            game.canvas.addEventListener('touchstart', (e) => {
-                e.preventDefault();
-                const touch = e.touches[0];
-                game.handleCanvasClick({ clientX: touch.clientX, clientY: touch.clientY });
-            }, { passive: false });
-        });
-    </script>
+    <script src="src/main.js"></script>
 </body>
 </html>
