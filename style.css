@@ -181,12 +181,84 @@ html, body {
     z-index: 100;
 }
 
-.resource-panel {
+/* HUD Top Panel (из index.html) */
+.hud-top {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
     display: flex;
     justify-content: space-between;
     align-items: center;
+    padding: 16px 24px;
+    pointer-events: none;
+    z-index: 100;
+}
+
+.resource-panel {
+    display: flex;
+    justify-content: flex-start;
+    align-items: center;
+    gap: 16px;
+    pointer-events: auto;
+}
+
+.resource-item {
+    background: var(--ui-panel-bg);
+    border: 2px solid var(--ui-panel-border);
+    border-radius: var(--border-radius-md);
+    padding: 8px 16px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    box-shadow: var(--shadow-md);
+    backdrop-filter: blur(10px);
+}
+
+.resource-item .icon {
+    font-size: 22px;
+}
+
+.resource-item .value {
+    color: var(--text-color);
+    font-weight: bold;
+    font-size: 18px;
+    text-shadow: 0 2px 4px rgba(0,0,0,0.5);
+}
+
+.settings-btn {
+    pointer-events: auto;
+    background: var(--ui-panel-bg);
+    border: 2px solid var(--ui-panel-border);
+    border-radius: var(--border-radius-md);
+    padding: 8px 12px;
+    font-size: 24px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.settings-btn:hover {
+    transform: scale(1.1);
+    border-color: var(--ui-accent);
+}
+
+/* Nav Bottom Panel (из index.html) */
+.nav-bottom {
+    position: absolute;
+    bottom: 0;
+    left: 0;
     width: 100%;
-    gap: 12px;
+    display: flex;
+    justify-content: space-around;
+    align-items: center;
+    background: var(--ui-panel-bg);
+    border: 2px solid var(--ui-panel-border);
+    border-radius: var(--border-radius-lg) var(--border-radius-lg) 0 0;
+    padding: 12px;
+    pointer-events: auto;
+    box-shadow: var(--shadow-lg);
+    backdrop-filter: blur(10px);
+    z-index: 100;
 }
 
 .resource-card {
