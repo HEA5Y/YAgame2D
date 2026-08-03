@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="theme-color" content="#000000">
+    <title>Brainrot Factory Evolution</title>
+    
+    <!-- Yandex Games SDK -->
+    <script src="https://yandex.ru/games/sdk/v2"></script>
+
+    <!-- Styles -->
+    <link rel="stylesheet" href="style.css">
+    <link rel="manifest" href="manifest.json">
+</head>
+<body>
+    <div id="game-container">
+        <canvas id="game-canvas"></canvas>
+        <div id="ui-layer"></div>
+        <div id="popup-layer"></div>
+        <div id="loading-screen">
+            <div class="loader-container">
+                <div class="loader-bar-bg">
+                    <div id="loader-bar-fill" class="loader-bar-fill"></div>
+                </div>
+                <div id="loader-text" class="loader-text">Инициализация ядра... 0%</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Utils -->
+    <script src="src/utils/Logger.js"></script>
+    <script src="src/utils/BigNumber.js"></script>
+    <script src="src/utils/MathUtils.js"></script>
+
+    <!-- Core & SDK -->
+    <script src="src/core/EventBus.js"></script>
+    <script src="src/core/GameConfig.js"></script>
+    <script src="src/sdk/YandexSDKManager.js"></script>
+
+    <!-- Managers (существующие) -->
+    <script src="src/managers/TimeManager.js"></script>
+    <script src="src/managers/SaveManager.js"></script>
+    <script src="src/managers/AudioManager.js"></script>
+    <script src="src/managers/ResourceManager.js"></script>
+    <script src="src/managers/ObjectPoolManager.js"></script>
+    <script src="src/managers/EconomyManager.js"></script>
+    <script src="src/managers/PrestigeManager.js"></script>
+    <script src="src/managers/UIManager.js"></script>
+    <script src="src/managers/SceneManager.js"></script>
+
+    <!-- Новые менеджеры -->
+    <script src="src/managers/UpgradeManager.js"></script>
+    <script src="src/managers/AchievementManager.js"></script>
+    <script src="src/managers/QuestManager.js"></script>
+    <script src="src/managers/EventManager.js"></script>
+    <script src="src/managers/OfflineManager.js"></script>
+
+    <!-- Данные -->
+    <script src="src/data/UpgradeData.js"></script>
+    <script src="src/data/AchievementData.js"></script>
+    <script src="src/data/QuestData.js"></script>
+    <script src="src/data/EventData.js"></script>
+
+    <!-- Engine & Main -->
+    <script src="src/core/Engine.js"></script>
+    <script src="src/core/Game.js"></script>
+    
+    <!-- Application Entry Point -->
+    <script>
+        window.addEventListener('load', () => {
+            const game = new Game();
+            game.bootstrap();
+        });
+    </script>
+</body>
+</html>

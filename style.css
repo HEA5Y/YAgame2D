@@ -1,0 +1,116 @@
+:root {
+    --primary-font: 'Arial', sans-serif; /* В будущем заменим на загруженный шрифт */
+    --bg-color: #0d0f12;
+    --text-color: #ffffff;
+    --ui-accent: #ff0055;
+    --ui-panel-bg: rgba(20, 25, 35, 0.95);
+}
+
+html, body {
+    margin: 0;
+    padding: 0;
+    width: 100vw;
+    height: 100vh;
+    background-color: var(--bg-color);
+    overflow: hidden;
+    
+    /* Запрет системных жестов и выделения */
+    touch-action: none;
+    user-select: none;
+    -webkit-user-select: none;
+    -webkit-touch-callout: none;
+    -moz-user-select: none;
+    -ms-user-select: none;
+}
+
+#game-container {
+    position: relative;
+    width: 100%;
+    height: 100%;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    background-color: #000;
+}
+
+/* Canvas масштабируется с сохранением пропорций (letterboxing) */
+#game-canvas {
+    display: block;
+    max-width: 100%;
+    max-height: 100%;
+    object-fit: contain;
+    aspect-ratio: 9 / 16;
+    background-color: var(--bg-color);
+    box-shadow: 0 0 20px rgba(0, 0, 0, 0.8);
+}
+
+/* UI слои располагаются строго поверх Canvas с теми же пропорциями */
+#ui-layer, #popup-layer, #loading-screen {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    width: 100%;
+    height: 100%;
+    max-width: 100%;
+    max-height: 100%;
+    aspect-ratio: 9 / 16;
+    pointer-events: none; /* Пропускаем клики сквозь контейнер, включаем только на кнопках */
+}
+
+/* Кликабельные элементы UI */
+.ui-interactive {
+    pointer-events: auto;
+    cursor: pointer;
+}
+
+#loading-screen {
+    background-color: var(--bg-color);
+    z-index: 9999;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    pointer-events: auto;
+    transition: opacity 0.5s ease-out;
+}
+
+.loader-container {
+    width: 80%;
+    max-width: 400px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 20px;
+}
+
+.loader-bar-bg {
+    width: 100%;
+    height: 24px;
+    background-color: #1a1f2b;
+    border-radius: 12px;
+    border: 2px solid #2a3548;
+    overflow: hidden;
+    position: relative;
+    box-shadow: inset 0 0 10px rgba(0,0,0,0.5);
+}
+
+.loader-bar-fill {
+    width: 0%;
+    height: 100%;
+    background: linear-gradient(90deg, #ff0055, #ff5500);
+    border-radius: 10px;
+    transition: width 0.1s linear;
+    position: absolute;
+    top: 0;
+    left: 0;
+}
+
+.loader-text {
+    font-family: var(--primary-font);
+    font-size: 18px;
+    color: var(--text-color);
+    font-weight: bold;
+    text-shadow: 0 2px 4px rgba(0,0,0,0.5);
+    text-align: center;
+}
