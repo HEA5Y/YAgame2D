@@ -55,6 +55,13 @@ class Game {
         this.managers.tween = new TweenManager();
         this.managers.pool.createPool('floating_text', () => new FloatingText(), 20);
         this.managers.particle = new ParticleManager(this.managers.pool);
+        
+        // Новые менеджеры для удержания и монетизации
+        this.managers.collection = new CollectionManager();
+        this.managers.battlepass = new BattlePassManager();
+        this.managers.daily = new DailyRewardsManager();
+        this.managers.chest = new ChestManager();
+        this.managers.juice = new JuiceManager();
 
         this.updateLoadingProgress(60, 'Загрузка ассетов...');
 
@@ -155,6 +162,8 @@ class Game {
         if (this.managers.pool) this.managers.pool.update(dt);
         if (this.managers.tween) this.managers.tween.update(dt);
         if (this.managers.factory) this.managers.factory.update(dt);
+        if (this.managers.chest) this.managers.chest.update(dt);
+        if (this.managers.juice) this.managers.juice.update(dt);
     }
 
     render() {
