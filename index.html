@@ -57,12 +57,21 @@
     <script src="src/managers/QuestManager.js"></script>
     <script src="src/managers/EventManager.js"></script>
     <script src="src/managers/OfflineManager.js"></script>
+    <script src="src/managers/TweenManager.js"></script>
+    <script src="src/managers/ParticleManager.js"></script>
+    <script src="src/managers/FactoryManager.js"></script>
 
     <!-- Данные -->
+    <script src="src/data/EconomyData.js"></script>
     <script src="src/data/UpgradeData.js"></script>
     <script src="src/data/AchievementData.js"></script>
     <script src="src/data/QuestData.js"></script>
     <script src="src/data/EventData.js"></script>
+
+    <!-- Entities -->
+    <script src="src/entities/FactoryLine.js"></script>
+    <script src="src/entities/Worker.js"></script>
+    <script src="src/entities/FloatingText.js"></script>
 
     <!-- Engine & Main -->
     <script src="src/core/Engine.js"></script>
@@ -73,6 +82,14 @@
         window.addEventListener('load', () => {
             const game = new Game();
             game.bootstrap();
+            
+            // Обработка кликов по canvas
+            game.canvas.addEventListener('click', (e) => game.handleCanvasClick(e));
+            game.canvas.addEventListener('touchstart', (e) => {
+                e.preventDefault();
+                const touch = e.touches[0];
+                game.handleCanvasClick({ clientX: touch.clientX, clientY: touch.clientY });
+            }, { passive: false });
         });
     </script>
 </body>
