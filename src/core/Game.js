@@ -1,6 +1,7 @@
 /**
- * Класс Game
- * Центральный фасад приложения. Управляет инициализацией и роутингом жизненного цикла.
+ * Класс Game - Рефакторинг
+ * Центральный фасад приложения с использованием ManagerRegistry
+ * Поэтапная инициализация, устранение жёстких зависимостей
  */
 class Game {
     constructor() {
@@ -8,95 +9,133 @@ class Game {
         this.ctx = this.canvas.getContext('2d', { alpha: false });
         
         this.engine = new Engine(this);
-        this.managers = {};
+        this.registry = null;
         this.handleResize = this.handleResize.bind(this);
-
-        // Делаем экземпляр доступным глобально для других менеджеров
-        window.gameInstance = this;
     }
 
     async bootstrap() {
-        Logger.info('Game', 'Начало загрузки Brainrot Factory Evolution...');
+        try {
+            await this._initSDK();
+            await this._createManagers();
+            await this._loadResources();
+            this._registerEvents();
+            await this._loadSave();
+            this._processOffline();
+            this._startGame();
+        } catch (error) {
+            Logger.error('Game', 'Критическая ошибка:', error);
+            this._handleFatalError(error);
+        }
+    }
+
+    async _initSDK() {
         this.updateLoadingProgress(10, 'Подключение Yandex SDK...');
-
         await yandexSDK.initialize();
+        Logger.info('Game', 'Yandex SDK инициализирован');
+    }
 
+    async _createManagers() {
         this.updateLoadingProgress(30, 'Инициализация подсистем...');
+        this.registry = new ManagerRegistry();
+        await this.registry.initializeAll();
+        window.gameRegistry = this.registry;
+        Logger.info('Game', `Инициализировано ${this.registry.count()} менеджеров`);
+    }
 
-        // --- Инициализация менеджеров (порядок важен) ---
-        this.managers.save = new SaveManager();
-        this.managers.audio = new AudioManager();
-        this.managers.time = new TimeManager();
-        this.managers.economy = new EconomyManager(this.managers.save);
-        this.managers.prestige = new PrestigeManager(this.managers.economy, this.managers.save);
-        this.managers.resources = new ResourceManager();
-        this.managers.pool = new ObjectPoolManager();
-        this.managers.ui = new UIManager();
-        this.managers.scene = new SceneManager(this);
-
-        // Новые менеджеры
-        this.managers.upgrade = new UpgradeManager(this.managers.save);
-        this.managers.achievement = new AchievementManager(this.managers.save);
-        this.managers.quest = new QuestManager(this.managers.save);
-        this.managers.event = new EventManager();
-        this.managers.offline = new OfflineManager(
-            this.managers.time,
-            this.managers.economy,
-            null // FactoryManager будет создан ниже
-        );
-        
-        // Создаем FactoryManager после EconomyManager
-        this.managers.factory = new FactoryManager(this.managers.economy, this.managers.save);
-        
-        // Обновляем ссылку на FactoryManager в OfflineManager
-        this.managers.offline.factoryManager = this.managers.factory;
-        
-        // Создаем TweenManager и ParticleManager
-        this.managers.tween = new TweenManager();
-        this.managers.pool.createPool('floating_text', () => new FloatingText(), 20);
-        this.managers.particle = new ParticleManager(this.managers.pool);
-        
-        // Новые менеджеры для удержания и монетизации
-        this.managers.collection = new CollectionManager();
-        this.managers.battlepass = new BattlePassManager();
-        this.managers.daily = new DailyRewardsManager();
-        this.managers.chest = new ChestManager();
-        this.managers.juice = new JuiceManager();
-
+    async _loadResources() {
         this.updateLoadingProgress(60, 'Загрузка ассетов...');
-
-        await this.managers.resources.loadInitialAssets((progress) => {
+        const resourcesManager = this.registry.get('resources');
+        await resourcesManager.loadInitialAssets((progress) => {
             const mappedProgress = 60 + (progress * 0.3);
             this.updateLoadingProgress(mappedProgress, 'Загрузка ассетов...');
         });
+        Logger.info('Game', 'Ресурсы загружены');
+    }
 
+    _registerEvents() {
         this.updateLoadingProgress(95, 'Подготовка сцен...');
-
         window.addEventListener('resize', this.handleResize);
         this.handleResize();
+        this._subscribeToEvents();
+        Logger.info('Game', 'События зарегистрированы');
+    }
 
-        // Загрузка сохранений и обработка оффлайн-дохода
-        await this.managers.save.loadGame();
-        this.managers.offline.processOfflineIncome();
+    async _loadSave() {
+        const saveManager = this.registry.get('save');
+        await saveManager.loadGame();
+        Logger.info('Game', 'Сохранения загружены');
+    }
 
+    _processOffline() {
+        const offlineManager = this.registry.get('offline');
+        offlineManager.processOfflineIncome();
+        Logger.info('Game', 'Оффлайн-доход обработан');
+    }
+
+    _startGame() {
         this.updateLoadingProgress(100, 'Готово!');
-
-        yandexSDK.gameReady();
-
         const loadingScreen = document.getElementById('loading-screen');
         loadingScreen.style.opacity = '0';
         setTimeout(() => loadingScreen.remove(), 500);
-
-        Logger.info('Game', 'Запуск игрового движка');
-        this.managers.scene.changeScene('BootScene');
-        this.engine.start();
         
+        Logger.info('Game', 'Запуск игрового движка');
+        const sceneManager = this.registry.get('scene');
+        sceneManager.changeScene('BootScene');
+        this.engine.start();
         gameEventBus.emit(GameConfig.EVENTS.ENGINE_INIT_COMPLETE);
+        
+        this._initUI();
+        yandexSDK.gameReady();
+        
+        if (GameConfig.YANDEX_GAMES.ANALYTICS_ENABLED) {
+            yandexSDK.logEvent('GameStarted', {
+                timestamp: Date.now(),
+                version: GameConfig.GAME.VERSION
+            });
+        }
+    }
 
-        // --- Подписка на события для UI-уведомлений ---
+    _initUI() {
+        const uiManager = this.registry.get('ui');
+        uiManager.createNotificationContainer();
+        
+        const dailyManager = this.registry.get('daily');
+        if (dailyManager && dailyManager.isRewardAvailable()) {
+            setTimeout(() => uiManager.showDailyRewardPopup(), 1000);
+        }
+        
+        const saveManager = this.registry.get('save');
+        const saveData = saveManager.collectSaveData();
+        if (!saveData.factory || Object.keys(saveData.factory).length === 0) {
+            setTimeout(() => this._showTutorial(), 2000);
+        }
+    }
+
+    _showTutorial() {
+        const uiManager = this.registry.get('ui');
+        const steps = [
+            { text: '👋 Добро пожаловать в Brainrot Factory!', icon: '🏭', duration: 3000 },
+            { text: '💰 Кликай по линиям чтобы собрать ресурсы', icon: '👆', duration: 4000 },
+            { text: '⬆️ Улучшай линии для увеличения производства', icon: '📈', duration: 4000 },
+            { text: '🎁 Забирай бесплатные сундуки каждые 10 минут!', icon: '🎁', duration: 3000 },
+            { text: '🚀 Поехали!', icon: '⭐', duration: 2000 }
+        ];
+        
+        let i = 0;
+        const next = () => {
+            if (i < steps.length) {
+                uiManager.showNotification(steps[i].text, steps[i].icon);
+                i++;
+                setTimeout(next, steps[i-1].duration);
+            }
+        };
+        next();
+    }
+
+    _subscribeToEvents() {
         gameEventBus.on(GameConfig.EVENTS.CURRENCY_CHANGED, (data) => {
             if (data.delta && data.delta.isGreaterThan(0)) {
-                const ui = this.managers.ui;
+                const ui = this.registry.get('ui');
                 if (ui && data.delta.isGreaterThan(100)) {
                     ui.showNotification(`+${data.delta.format()} ${data.currency}`, '💰');
                 }
@@ -104,19 +143,65 @@ class Game {
         });
 
         gameEventBus.on(GameConfig.EVENTS.ACHIEVEMENT_UNLOCKED, (data) => {
-            this.managers.ui.showNotification(`🏆 Достижение: ${data.name}`, '🏆');
+            const ui = this.registry.get('ui');
+            const juice = this.registry.get('juice');
+            if (ui) ui.showNotification(`🏆 Достижение: ${data.name}`, '🏆');
+            if (juice) {
+                juice.triggerScreenShake(10);
+                juice.spawnConfetti(window.innerWidth / 2, window.innerHeight / 2);
+            }
+            if (GameConfig.YANDEX_GAMES.ANALYTICS_ENABLED) {
+                yandexSDK.logEvent('AchievementUnlocked', { achievementName: data.name });
+            }
         });
 
         gameEventBus.on(GameConfig.EVENTS.QUEST_COMPLETED, (data) => {
-            this.managers.ui.showNotification(`✅ Квест выполнен: ${data.description}`, '✅');
+            const ui = this.registry.get('ui');
+            if (ui) ui.showNotification(`✅ Квест выполнен: ${data.description}`, '✅');
+        });
+        
+        gameEventBus.on(GameConfig.EVENTS.RARE_ITEM_OBTAINED, (data) => {
+            const ui = this.registry.get('ui');
+            const juice = this.registry.get('juice');
+            if (ui) ui.showRareItemPopup(data.item, data.rarity);
+            if (juice) {
+                juice.triggerScreenShake(15);
+                juice.spawnFireworks(window.innerWidth / 2, window.innerHeight / 2);
+            }
         });
 
         gameEventBus.on('show_notification', (data) => {
-            this.managers.ui.showNotification(data.text, data.icon);
+            const ui = this.registry.get('ui');
+            if (ui) ui.showNotification(data.text, data.icon);
         });
-
-        // Создаём контейнер для уведомлений
-        this.managers.ui.createNotificationContainer();
+        
+        gameEventBus.on('factory_upgraded', (data) => {
+            if (GameConfig.YANDEX_GAMES.ANALYTICS_ENABLED) {
+                yandexSDK.logEvent('FactoryUpgrade', {
+                    lineId: data.lineId,
+                    level: data.level,
+                    cost: data.cost.toString()
+                });
+            }
+        });
+        
+        gameEventBus.on(GameConfig.EVENTS.PRESTIGE_ACTIVATED, (data) => {
+            if (GameConfig.YANDEX_GAMES.ANALYTICS_ENABLED) {
+                yandexSDK.logEvent('Prestige', {
+                    brainCellsEarned: data.brainCells.toString(),
+                    totalPrestiges: data.totalPrestiges
+                });
+            }
+        });
+        
+        gameEventBus.on('ad_watched', (data) => {
+            if (GameConfig.YANDEX_GAMES.ANALYTICS_ENABLED) {
+                yandexSDK.logEvent('WatchAd', {
+                    adType: data.adType,
+                    reward: data.reward
+                });
+            }
+        });
     }
 
     handleResize() {
@@ -137,9 +222,13 @@ class Game {
         this.canvas.width = displayWidth * dpr;
         this.canvas.height = displayHeight * dpr;
 
-        this.ctx.scale(
+        this.ctx.setTransform(
             (displayWidth * dpr) / GameConfig.ENGINE.CANVAS_LOGICAL_WIDTH,
-            (displayHeight * dpr) / GameConfig.ENGINE.CANVAS_LOGICAL_HEIGHT
+            0,
+            0,
+            (displayHeight * dpr) / GameConfig.ENGINE.CANVAS_LOGICAL_HEIGHT,
+            0,
+            0
         );
 
         gameEventBus.emit(GameConfig.EVENTS.RESIZE, {
@@ -157,26 +246,18 @@ class Game {
     }
 
     update(dt) {
-        if (this.managers.time) this.managers.time.update(dt);
-        if (this.managers.scene) this.managers.scene.update(dt);
-        if (this.managers.pool) this.managers.pool.update(dt);
-        if (this.managers.tween) this.managers.tween.update(dt);
-        if (this.managers.factory) this.managers.factory.update(dt);
-        if (this.managers.chest) this.managers.chest.update(dt);
-        if (this.managers.juice) this.managers.juice.update(dt);
+        if (this.registry) this.registry.updateAll(dt);
     }
 
     render() {
         this.ctx.fillStyle = '#0d0f12';
         this.ctx.fillRect(0, 0, GameConfig.ENGINE.CANVAS_LOGICAL_WIDTH, GameConfig.ENGINE.CANVAS_LOGICAL_HEIGHT);
-        if (this.managers.scene) this.managers.scene.render(this.ctx);
-        if (this.managers.particle) this.managers.particle.pool.render(this.ctx);
+        if (this.registry) this.registry.renderAll(this.ctx);
     }
     
-    /**
-     * Обработка кликов по canvas
-     */
     handleCanvasClick(event) {
+        if (!this.registry) return false;
+        
         const rect = this.canvas.getBoundingClientRect();
         const scaleX = this.canvas.width / rect.width;
         const scaleY = this.canvas.height / rect.height;
@@ -184,11 +265,32 @@ class Game {
         const clickX = (event.clientX - rect.left) * scaleX / (window.devicePixelRatio || 1);
         const clickY = (event.clientY - rect.top) * scaleY / (window.devicePixelRatio || 1);
         
-        // Передаем клик в FactoryManager для обработки линий
-        if (this.managers.factory && this.managers.factory.handleClick(clickX, clickY)) {
+        const factoryManager = this.registry.get('factory');
+        if (factoryManager && factoryManager.handleClick(clickX, clickY)) {
+            return true;
+        }
+        
+        const chestManager = this.registry.get('chest');
+        if (chestManager && chestManager.handleClick(clickX, clickY)) {
             return true;
         }
         
         return false;
+    }
+    
+    _handleFatalError(error) {
+        const loadingScreen = document.getElementById('loading-screen');
+        if (loadingScreen) {
+            loadingScreen.innerHTML = `
+                <div style="color: #ff0055; font-size: 24px; text-align: center; padding: 40px;">
+                    <h2>😱 Ошибка загрузки!</h2>
+                    <p>${error.message}</p>
+                    <button onclick="location.reload()" style="margin-top: 20px; padding: 15px 30px; font-size: 18px; background: #ff0055; color: white; border: none; border-radius: 10px; cursor: pointer;">
+                        🔄 Перезагрузить
+                    </button>
+                </div>
+            `;
+            loadingScreen.style.opacity = '1';
+        }
     }
 }
