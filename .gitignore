@@ -1,1 +1,1 @@
-(src/managers/SceneManager.js)
+Nothing needs to be added to .gitignore since all the changes are JavaScript source files (.js) and HTML files, which are not build artifacts, dependencies, or temporary files.
