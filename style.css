@@ -595,18 +595,25 @@ html, body {
     .side-panel-handle { left: -42px; }
 }
 
+/* Main panel content - центрированная панель справа */
 .ui-panel-content {
     display: none;
+    position: fixed;
+    right: 20px;
+    top: 50%;
+    transform: translateY(-50%);
     background: var(--gradient-card);
     border: 1px solid var(--border-medium);
     border-radius: var(--radius-xl);
     padding: 16px;
-    width: 100%;
+    width: 360px;
+    max-width: calc(100vw - 40px);
     height: auto;
-    max-height: 80vh;
+    max-height: calc(100vh - 160px);
     overflow: auto;
-    box-shadow: var(--shadow-lg);
+    box-shadow: var(--shadow-lg), var(--shadow-glow);
     backdrop-filter: blur(16px);
+    z-index: 200;
 }
 
 .ui-panel-content h2 {
