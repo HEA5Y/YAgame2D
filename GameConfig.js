@@ -11,8 +11,8 @@ const GameConfig = {
         TARGET_FPS: 60,
         FRAME_TIME: 1000 / 60,
         MAX_DELTA_TIME: 100, // Максимальный шаг (мс), чтобы избежать скачков физики при лагах
-        CANVAS_LOGICAL_WIDTH: 1080,
-        CANVAS_LOGICAL_HEIGHT: 1920,
+        CANVAS_LOGICAL_WIDTH: 1920,
+        CANVAS_LOGICAL_HEIGHT: 1080,
         MIN_SCALE: 0.5,
         MAX_SCALE: 2.0,
         IS_PRODUCTION: false // Переключить в true перед релизом
