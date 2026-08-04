@@ -75,10 +75,8 @@ html, body {
     position: relative;
     width: 100%;
     height: 100%;
-    display: flex;
-    justify-content: center;
-    align-items: center;
     background-color: var(--bg-dark);
+    overflow: hidden;
 }
 
 /* Canvas масштабируется с сохранением пропорций (letterboxing) */
@@ -87,7 +85,11 @@ html, body {
     width: 100%;
     height: 100%;
     background: var(--gradient-bg);
-    box-shadow: inset 0 0 100px rgba(124, 58, 237, 0.1);
+    box-shadow: inset 0 0 60px rgba(124, 58, 237, 0.08);
+    position: absolute;
+    top: 0;
+    left: 0;
+    z-index: 1;
 }
 
 /* UI слои */
@@ -98,6 +100,7 @@ html, body {
     width: 100%;
     height: 100%;
     pointer-events: none;
+    z-index: 100;
 }
 
 /* Кликабельные элементы UI */
@@ -200,82 +203,87 @@ html, body {
     top: 0;
     left: 0;
     width: 100%;
-    height: auto;
+    height: 100%;
     pointer-events: none;
     display: flex;
     flex-direction: column;
     justify-content: space-between;
-    padding: 16px 16px 0 16px;
+    padding: 0;
     z-index: 110;
 }
 
 /* HUD Top Panel (из index.html) */
 .hud-top {
-    position: relative;
+    position: absolute;
+    top: 0;
+    left: 0;
     width: 100%;
     display: flex;
     justify-content: space-between;
     align-items: center;
     padding: 8px 16px;
-    height: 72px;
+    height: 64px;
     pointer-events: none;
     z-index: 110;
+    background: linear-gradient(180deg, rgba(18, 24, 38, 0.85) 0%, rgba(18, 24, 38, 0.4) 100%);
+    backdrop-filter: blur(8px);
 }
 
 .resource-panel {
     display: flex;
     justify-content: flex-start;
     align-items: center;
-    gap: 16px;
+    gap: 12px;
     pointer-events: auto;
 }
 
 .resource-item {
-    background: var(--gradient-card);
-    border: 1px solid var(--border-medium);
+    background: linear-gradient(145deg, rgba(37, 48, 68, 0.6) 0%, rgba(18, 24, 38, 0.7) 100%);
+    border: 1px solid var(--border-light);
     border-radius: var(--radius-lg);
-    padding: 10px 18px;
+    padding: 8px 14px;
     display: flex;
     align-items: center;
     gap: 10px;
-    box-shadow: var(--shadow-md), inset 0 1px 0 rgba(255,255,255,0.1);
-    backdrop-filter: blur(12px);
+    box-shadow: var(--shadow-sm), inset 0 1px 0 rgba(255,255,255,0.08);
+    backdrop-filter: blur(8px);
     transition: all 0.3s ease;
 }
 
 .resource-item:hover {
     border-color: var(--accent-primary);
-    box-shadow: var(--shadow-glow), inset 0 1px 0 rgba(255,255,255,0.15);
+    box-shadow: var(--shadow-glow-cyan), inset 0 1px 0 rgba(255,255,255,0.12);
+    background: linear-gradient(145deg, rgba(37, 48, 68, 0.8) 0%, rgba(18, 24, 38, 0.85) 100%);
 }
 
 .resource-item .icon {
-    font-size: 24px;
-    filter: drop-shadow(0 0 8px rgba(255,255,255,0.3));
+    font-size: 20px;
+    filter: drop-shadow(0 0 6px rgba(255,255,255,0.25));
 }
 
 .resource-item .value {
     color: var(--text-primary);
     font-weight: bold;
-    font-size: 18px;
-    text-shadow: 0 2px 8px rgba(0,0,0,0.6);
+    font-size: 16px;
+    text-shadow: 0 2px 6px rgba(0,0,0,0.5);
 }
 
 .settings-btn {
     pointer-events: auto;
-    background: var(--gradient-card);
-    border: 1px solid var(--border-medium);
+    background: linear-gradient(145deg, rgba(37, 48, 68, 0.6) 0%, rgba(18, 24, 38, 0.7) 100%);
+    border: 1px solid var(--border-light);
     border-radius: var(--radius-lg);
-    padding: 10px 14px;
-    font-size: 24px;
+    padding: 8px 12px;
+    font-size: 20px;
     cursor: pointer;
     transition: all 0.3s ease;
-    box-shadow: var(--shadow-md);
+    box-shadow: var(--shadow-sm);
 }
 
 .settings-btn:hover {
-    transform: scale(1.15) rotate(15deg);
+    transform: scale(1.1) rotate(15deg);
     border-color: var(--accent-primary);
-    box-shadow: var(--shadow-glow);
+    box-shadow: var(--shadow-glow-cyan);
 }
 
 /* Nav Bottom Panel (из index.html) */
@@ -287,13 +295,13 @@ html, body {
     display: flex;
     justify-content: space-around;
     align-items: center;
-    background: var(--gradient-card);
+    background: linear-gradient(0deg, rgba(18, 24, 38, 0.95) 0%, rgba(18, 24, 38, 0.6) 100%);
     border-top: 1px solid var(--border-medium);
     border-radius: var(--radius-xl) var(--radius-xl) 0 0;
-    padding: 16px 12px 20px;
+    padding: 12px 12px 16px;
     pointer-events: auto;
-    box-shadow: 0 -8px 32px rgba(0,0,0,0.4), inset 0 1px 0 rgba(255,255,255,0.1);
-    backdrop-filter: blur(16px);
+    box-shadow: 0 -8px 32px rgba(0,0,0,0.5), inset 0 1px 0 rgba(255,255,255,0.1);
+    backdrop-filter: blur(12px);
     z-index: 120;
 }
 
@@ -339,20 +347,20 @@ html, body {
 }
 
 .nav-btn {
-    background: var(--gradient-card);
+    background: linear-gradient(145deg, rgba(37, 48, 68, 0.5) 0%, rgba(18, 24, 38, 0.6) 100%);
     border: 1px solid var(--border-light);
     border-radius: var(--radius-lg);
     color: var(--text-secondary);
-    padding: 14px 18px;
+    padding: 10px 14px;
     font-weight: 600;
-    font-size: 13px;
+    font-size: 12px;
     cursor: pointer;
     transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
     display: flex;
     flex-direction: column;
     align-items: center;
     gap: 6px;
-    min-width: 70px;
+    min-width: 60px;
     position: relative;
     overflow: hidden;
 }
@@ -364,7 +372,7 @@ html, body {
     left: -100%;
     width: 100%;
     height: 100%;
-    background: linear-gradient(90deg, transparent, rgba(255,255,255,0.1), transparent);
+    background: linear-gradient(90deg, transparent, rgba(255,255,255,0.08), transparent);
     transition: left 0.5s ease;
 }
 
@@ -373,23 +381,23 @@ html, body {
 }
 
 .nav-btn:hover {
-    background: var(--gradient-glow);
+    background: linear-gradient(145deg, rgba(37, 48, 68, 0.7) 0%, rgba(18, 24, 38, 0.75) 100%);
     border-color: var(--accent-primary);
     color: var(--text-primary);
-    transform: translateY(-5px);
-    box-shadow: var(--shadow-glow);
+    transform: translateY(-3px);
+    box-shadow: var(--shadow-glow-cyan);
 }
 
 .nav-btn.active {
     background: var(--gradient-primary);
     border-color: var(--accent-primary-light);
     color: var(--text-primary);
-    box-shadow: var(--shadow-glow), 0 0 30px rgba(124, 58, 237, 0.5);
-    transform: translateY(-3px);
+    box-shadow: var(--shadow-glow), 0 0 20px rgba(124, 58, 237, 0.4);
+    transform: translateY(-2px);
 }
 
 .nav-btn-icon {
-    font-size: 24px;
+    font-size: 20px;
     transition: transform 0.3s ease;
 }
 
