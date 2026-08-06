@@ -1,284 +1,309 @@
-/**
- * Класс FactoryManager
- * Управляет всеми производственными линиями фабрики, рабочими и визуализацией.
- * Интегрируется с EconomyManager для производства ресурсов.
- */
-
 class FactoryManager {
-    /**
-     * @param {EconomyManager} economyManager
-     * @param {SaveManager} saveManager
-     */
     constructor(economyManager, saveManager) {
         this.economyManager = economyManager;
         this.saveManager = saveManager;
-        
-        // Все линии фабрики
         this.lines = new Map();
-        
-        // Рабочие (пул)
         this.workers = [];
-        
-        // Визуальные параметры для рендера
-        this.canvasWidth = GameConfig.ENGINE.CANVAS_LOGICAL_WIDTH;
-        this.canvasHeight = GameConfig.ENGINE.CANVAS_LOGICAL_HEIGHT;
-        
-        // Позиции линий на экране
         this.linePositions = {};
-        
-        // Инициализация линий из конфига
+        this.lineIcons = {
+            'resource_intake': '📦',
+            'cleaning': '🧼',
+            'incubator': '🧬',
+            'mutation': '⚗️',
+            'assembly': '🔧',
+            'quality_control': '🔍',
+            'packaging': '📦',
+            'sales': '💰'
+        };
+        this.lineColors = {
+            'resource_intake': '#ff0055',
+            'cleaning': '#00ffcc',
+            'incubator': '#ffdd44',
+            'mutation': '#ff66ff',
+            'assembly': '#66ff66',
+            'quality_control': '#66ccff',
+            'packaging': '#ff9966',
+            'sales': '#ffcc00'
+        };
+        this.time = 0;
         this.initLines();
-        
-        if (saveManager) {
-            saveManager.registerSubsystem('factory', this);
-        }
-        
+        if (saveManager) saveManager.registerSubsystem('factory', this);
         this.subscribeEvents();
     }
-    
+
     initLines() {
-        // Создаем линии из EconomyData.FACTORY_LINES
         for (const [lineId, config] of Object.entries(EconomyData.FACTORY_LINES)) {
             const line = new FactoryLine(lineId, config, this.economyManager);
             this.lines.set(lineId, line);
-            
-            // Вычисляем позицию для рендера (вертикальный список)
-            const index = Array.from(this.lines.keys()).indexOf(lineId);
-            this.linePositions[lineId] = {
-                x: 100,
-                y: 350 + index * 180,
-                width: 880,
-                height: 140
-            };
         }
-        
-        Logger.info('FactoryManager', `Инициализировано ${this.lines.size} производственных линий`);
+        Logger.info('FactoryManager', `Инициализировано ${this.lines.size} линий`);
     }
-    
+
     subscribeEvents() {
-        // Подписка на события изменения множителей
         gameEventBus.on('modifier_speed', (data) => {
-            for (const line of this.lines.values()) {
-                line.speedMultiplier = data;
-            }
+            for (const line of this.lines.values()) line.speedMultiplier = data;
         });
-        
         gameEventBus.on('modifier_energy', (data) => {
-            for (const line of this.lines.values()) {
-                line.productionMultiplier = data;
-            }
+            for (const line of this.lines.values()) line.productionMultiplier = data;
         });
-        
-        // ИСПРАВЛЕНО: слушаем prestige_speed_bonus и применяем как modifier_speed
         gameEventBus.on('prestige_speed_bonus', (data) => {
             if (data && data.multiplier) {
-                for (const line of this.lines.values()) {
-                    line.speedMultiplier = data.multiplier;
-                }
+                for (const line of this.lines.values()) line.speedMultiplier = data.multiplier;
             }
         });
-        
-        gameEventBus.on(GameConfig.EVENTS.PRESTIGE_ACTIVATED, (data) => {
-            // Сброс прогресса линий при престиже
+        gameEventBus.on(GameConfig.EVENTS.PRESTIGE_ACTIVATED, () => {
             for (const line of this.lines.values()) {
-                line.level = 0;
-                line.unlocked = false;
-                line.progress = 0;
+                line.level = 0; line.unlocked = false; line.progress = 0;
                 line.pendingCollection = new BigNumber(0);
             }
-            Logger.info('FactoryManager', 'Прогресс фабрики сброшен из-за престижа');
+            Logger.info('FactoryManager', 'Прогресс сброшен');
         });
     }
-    
-    /**
-     * Получить линию по ID
-     */
-    getLine(lineId) {
-        return this.lines.get(lineId);
-    }
-    
-    /**
-     * Получить общее производство в секунду (для оффлайн-дохода)
-     */
+
+    getLine(lineId) { return this.lines.get(lineId); }
+
     getTotalProductionPerSecond() {
         let total = new BigNumber(0);
         for (const line of this.lines.values()) {
             if (line.unlocked && line.level > 0) {
-                // Производство за цикл / время цикла = производство в секунду
                 const output = line.getProductionOutput();
                 const time = line.getProductionTime();
-                const perSecond = output.divide(new BigNumber(time));
-                total = total.add(perSecond);
+                total = total.add(output.divide(new BigNumber(time)));
             }
         }
         return total;
     }
-    
-    /**
-     * Обработка оффлайн-дохода
-     */
+
     processOfflineIncome(seconds) {
-        const perSecond = this.getTotalProductionPerSecond();
-        const total = perSecond.multiply(seconds);
-        // Применяем множитель оффлайн
-        const final = total.multiply(GameConfig.ECONOMY.OFFLINE_PRODUCTION_PERCENT);
-        return final;
+        return this.getTotalProductionPerSecond().multiply(seconds)
+            .multiply(GameConfig.ECONOMY.OFFLINE_PRODUCTION_PERCENT);
     }
-    
-    /**
-     * Обновление всех линий
-     */
+
     update(dt) {
-        for (const line of this.lines.values()) {
-            line.update(dt);
-        }
-        
-        // Обновление рабочих
-        for (const worker of this.workers) {
-            worker.update(dt);
-        }
+        this.time += dt;
+        for (const line of this.lines.values()) line.update(dt);
+        for (const worker of this.workers) worker.update(dt);
     }
-    
-    /**
-     * Рендер фабрики на Canvas
-     */
-    render(ctx) {
-        // Фон фабрики
-        ctx.fillStyle = '#1a1f2b';
-        ctx.fillRect(50, 300, 980, 1400);
-        
-        // Заголовок
-        ctx.fillStyle = '#ffffff';
-        ctx.font = 'bold 32px Arial';
-        ctx.textAlign = 'center';
-        ctx.fillText('🏭 Производственные линии', 540, 340);
-        
-        // Рендер каждой линии
+
+    render(ctx, W, H) {
+        const count = this.lines.size;
+        if (count === 0) return;
+
+        const marginX = 24;
+        const marginY = 50;
+        const gap = 12;
+        const availableH = H - marginY - 16;
+        const lineH = Math.min(110, Math.floor((availableH - (count - 1) * gap) / count));
+        const lineW = W - marginX * 2;
+
+        let idx = 0;
         for (const [lineId, line] of this.lines) {
-            const pos = this.linePositions[lineId];
-            this.renderLine(ctx, line, pos);
+            const y = marginY + idx * (lineH + gap);
+            this.linePositions[lineId] = { x: marginX, y, w: lineW, h: lineH };
+            this.renderLine(ctx, line, lineId, marginX, y, lineW, lineH);
+            idx++;
         }
     }
-    
-    /**
-     * Рендер одной линии
-     */
-    renderLine(ctx, line, pos) {
-        // Фон линии
-        ctx.fillStyle = line.unlocked ? '#2a3548' : '#1a1f2b';
-        ctx.fillRect(pos.x, pos.y, pos.width, pos.height);
-        
-        // Граница
-        ctx.strokeStyle = line.unlocked ? '#ff0055' : '#444444';
-        ctx.lineWidth = 3;
-        ctx.strokeRect(pos.x, pos.y, pos.width, pos.height);
-        
-        // Название и уровень
-        ctx.fillStyle = '#ffffff';
-        ctx.font = 'bold 24px Arial';
+
+    renderLine(ctx, line, lineId, x, y, w, h) {
+        const r = 12;
+        const color = this.lineColors[lineId] || '#ff0055';
+        const icon = this.lineIcons[lineId] || '⚙️';
+        const isActive = line.unlocked && line.level > 0;
+
+        if (isActive) {
+            ctx.save();
+            ctx.shadowColor = color;
+            ctx.shadowBlur = 20 + Math.sin(this.time * 3) * 5;
+            ctx.fillStyle = 'rgba(0,0,0,0)';
+            ctx.fillRect(x - 2, y - 2, w + 4, h + 4);
+            ctx.restore();
+        }
+
+        ctx.fillStyle = isActive ? 'rgba(42,53,72,0.8)' : 'rgba(18,24,38,0.5)';
+        this.roundRect(ctx, x, y, w, h, r);
+        ctx.fill();
+
+        ctx.strokeStyle = isActive ? color : 'rgba(255,255,255,0.06)';
+        ctx.lineWidth = isActive ? 2 : 1;
+        this.roundRect(ctx, x, y, w, h, r);
+        ctx.stroke();
+
+        const iconSize = 24;
+        const iconX = x + 16;
+        const iconY = y + h / 2;
+        const iconPulse = isActive ? 1 + Math.sin(this.time * 4 + lineId.length) * 0.1 : 1;
+        const iconRot = isActive ? Math.sin(this.time * 2 + lineId.length) * 0.1 : 0;
+
+        ctx.save();
+        ctx.translate(iconX, iconY);
+        ctx.scale(iconPulse, iconPulse);
+        ctx.rotate(iconRot);
+        ctx.font = iconSize + 'px Arial';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText(icon, 0, 0);
+        ctx.restore();
+
+        ctx.fillStyle = '#fff';
+        ctx.font = 'bold 15px Montserrat, Arial, sans-serif';
         ctx.textAlign = 'left';
-        ctx.fillText(`${line.name} (Ур. ${line.level})`, pos.x + 20, pos.y + 40);
-        
-        // Прогресс бар производства
-        if (line.unlocked && line.level > 0) {
-            const barWidth = pos.width - 40;
-            const barHeight = 20;
-            const barX = pos.x + 20;
-            const barY = pos.y + 60;
-            
-            // Фон прогресс бара
-            ctx.fillStyle = '#1a1f2b';
-            ctx.fillRect(barX, barY, barWidth, barHeight);
-            
-            // Заполнение
-            ctx.fillStyle = '#ff0055';
-            ctx.fillRect(barX, barY, barWidth * line.progress, barHeight);
-            
-            // Граница прогресс бара
-            ctx.strokeStyle = '#444444';
-            ctx.lineWidth = 2;
-            ctx.strokeRect(barX, barY, barWidth, barHeight);
-            
-            // Ожидающий сбор
+        ctx.textBaseline = 'alphabetic';
+        ctx.fillText(line.name + ' (Ур. ' + line.level + ')', x + 44, y + 22);
+
+        if (isActive) {
+            const barW = w - 200;
+            const barH = 12;
+            const barX = x + 44;
+            const barY = y + 34;
+
+            ctx.fillStyle = 'rgba(0,0,0,0.5)';
+            this.roundRect(ctx, barX, barY, barW, barH, 6);
+            ctx.fill();
+
+            const fillW = barW * Math.min(line.progress, 1);
+            const grad = ctx.createLinearGradient(barX, barY, barX + fillW, barY);
+            grad.addColorStop(0, color);
+            grad.addColorStop(1, this.lightenColor(color, 40));
+            ctx.fillStyle = grad;
+            this.roundRect(ctx, barX, barY, fillW, barH, 6);
+            ctx.fill();
+
+            if (fillW > 5) {
+                ctx.save();
+                ctx.shadowColor = color;
+                ctx.shadowBlur = 10;
+                ctx.fillStyle = 'rgba(255,255,255,0.3)';
+                ctx.fillRect(barX + fillW - 3, barY, 3, barH);
+                ctx.restore();
+            }
+
+            if (line.progress > 0.1 && line.progress < 0.95) {
+                const particleX = barX + barW * line.progress;
+                const particleY = barY + barH / 2;
+                ctx.fillStyle = '#fff';
+                ctx.beginPath();
+                ctx.arc(particleX, particleY, 3, 0, Math.PI * 2);
+                ctx.fill();
+            }
+
             if (line.pendingCollection && line.pendingCollection.isGreaterThan(0)) {
                 ctx.fillStyle = '#ffdd44';
-                ctx.font = 'bold 20px Arial';
+                ctx.font = 'bold 13px Montserrat, Arial, sans-serif';
                 ctx.textAlign = 'right';
-                ctx.fillText(`+${line.pendingCollection.format()} 💰`, pos.x + pos.width - 20, pos.y + 75);
+                ctx.fillText('+' + line.pendingCollection.format() + ' 💰', x + w - 160, y + 44);
             }
-            
-            // Производство в секунду
+
             const prodPerSec = line.getProductionOutput().divide(new BigNumber(line.getProductionTime()));
             ctx.fillStyle = '#00ffcc';
-            ctx.font = '18px Arial';
+            ctx.font = '12px Montserrat, Arial, sans-serif';
             ctx.textAlign = 'left';
-            ctx.fillText(`${prodPerSec.format()} / сек`, pos.x + 20, pos.y + 110);
+            ctx.fillText(prodPerSec.format() + ' / сек', x + 44, y + 66);
+
+            const workerCount = Math.min(line.level, 5);
+            for (let i = 0; i < workerCount; i++) {
+                const wx = x + 44 + i * 18;
+                const wy = y + h - 18;
+                const wobble = Math.sin(this.time * 3 + i * 1.5) * 2;
+                ctx.fillStyle = color;
+                ctx.beginPath();
+                ctx.arc(wx, wy + wobble, 4, 0, Math.PI * 2);
+                ctx.fill();
+            }
         } else {
-            // locked
-            ctx.fillStyle = '#666666';
-            ctx.font = '20px Arial';
+            ctx.fillStyle = '#666';
+            ctx.font = '13px Montserrat, Arial, sans-serif';
             ctx.textAlign = 'center';
-            ctx.fillText('🔒 Заблокировано', pos.x + pos.width / 2, pos.y + 70);
+            ctx.fillText('🔒 Заблокировано', x + w / 2, y + h / 2 + 4);
         }
-        
-        // Кнопка улучшения
-        const btnX = pos.x + pos.width - 200;
-        const btnY = pos.y + 90;
-        const btnWidth = 180;
-        const btnHeight = 40;
-        
-        ctx.fillStyle = '#ff0055';
-        ctx.fillRect(btnX, btnY, btnWidth, btnHeight);
-        
-        ctx.fillStyle = '#ffffff';
-        ctx.font = 'bold 16px Arial';
+
+        const btnW = 130;
+        const btnH = 32;
+        const btnX = x + w - btnW - 14;
+        const btnY = y + h - btnH - 12;
+
+        if (isActive) {
+            ctx.save();
+            ctx.shadowColor = color;
+            ctx.shadowBlur = 15;
+            ctx.fillStyle = 'rgba(0,0,0,0)';
+            ctx.fillRect(btnX - 2, btnY - 2, btnW + 4, btnH + 4);
+            ctx.restore();
+        }
+
+        ctx.fillStyle = isActive ? color : '#444';
+        this.roundRect(ctx, btnX, btnY, btnW, btnH, 8);
+        ctx.fill();
+
+        if (isActive) {
+            const btnGrad = ctx.createLinearGradient(btnX, btnY, btnX, btnY + btnH);
+            btnGrad.addColorStop(0, 'rgba(255,255,255,0.2)');
+            btnGrad.addColorStop(1, 'rgba(0,0,0,0.1)');
+            ctx.fillStyle = btnGrad;
+            this.roundRect(ctx, btnX, btnY, btnW, btnH, 8);
+            ctx.fill();
+        }
+
+        ctx.fillStyle = '#fff';
+        ctx.font = 'bold 12px Montserrat, Arial, sans-serif';
         ctx.textAlign = 'center';
-        ctx.fillText('Улучшить', btnX + btnWidth / 2, btnY + 25);
-        
-        // Стоимость
+        ctx.textBaseline = 'middle';
+        ctx.fillText(isActive ? 'Улучшить' : 'Открыть', btnX + btnW / 2, btnY + btnH / 2);
+        ctx.textBaseline = 'alphabetic';
+
         const cost = line.getUpgradeCost(1);
         ctx.fillStyle = '#ffdd44';
-        ctx.font = '14px Arial';
-        ctx.fillText(cost.format(), btnX + btnWidth / 2, btnY + 38);
+        ctx.font = '10px Montserrat, Arial, sans-serif';
+        ctx.fillText(cost.format(), btnX + btnW / 2, btnY + btnH + 12);
     }
-    
-    /**
-     * Обработка клика по линиям фабрики
-     */
+
+    roundRect(ctx, x, y, w, h, r) {
+        ctx.beginPath();
+        ctx.moveTo(x + r, y);
+        ctx.lineTo(x + w - r, y);
+        ctx.quadraticCurveTo(x + w, y, x + w, y + r);
+        ctx.lineTo(x + w, y + h - r);
+        ctx.quadraticCurveTo(x + w, y + h, x + w - r, y + h);
+        ctx.lineTo(x + r, y + h);
+        ctx.quadraticCurveTo(x, y + h, x, y + h - r);
+        ctx.lineTo(x, y + r);
+        ctx.quadraticCurveTo(x, y, x + r, y);
+        ctx.closePath();
+    }
+
+    lightenColor(hex, percent) {
+        const num = parseInt(hex.replace('#', ''), 16);
+        const amt = Math.round(2.55 * percent);
+        const R = Math.min(255, (num >> 16) + amt);
+        const G = Math.min(255, ((num >> 8) & 0x00FF) + amt);
+        const B = Math.min(255, (num & 0x0000FF) + amt);
+        return '#' + (0x1000000 + R * 0x10000 + G * 0x100 + B).toString(16).slice(1);
+    }
+
     handleClick(x, y) {
         for (const [lineId, line] of this.lines) {
             const pos = this.linePositions[lineId];
-            
-            // Проверка клика по кнопке улучшения
-            const btnX = pos.x + pos.width - 200;
-            const btnY = pos.y + 90;
-            const btnWidth = 180;
-            const btnHeight = 40;
-            
-            if (x >= btnX && x <= btnX + btnWidth && y >= btnY && y <= btnY + btnHeight) {
+            if (!pos) continue;
+
+            const btnW = 130;
+            const btnH = 32;
+            const btnX = pos.x + pos.w - btnW - 14;
+            const btnY = pos.y + pos.h - btnH - 12;
+
+            if (x >= btnX && x <= btnX + btnW && y >= btnY && y <= btnY + btnH) {
                 line.upgrade(1);
                 return true;
             }
-            
-            // Проверка клика по линии для ручного сбора
+
             if (line.unlocked && line.pendingCollection && line.pendingCollection.isGreaterThan(0)) {
-                if (x >= pos.x && x <= pos.x + pos.width && y >= pos.y && y <= pos.y + pos.height) {
+                if (x >= pos.x && x <= pos.x + pos.w && y >= pos.y && y <= pos.y + pos.h) {
                     const collected = line.collectManual();
                     if (collected) {
                         gameEventBus.emit('manual_collect');
-                        
-                        // Визуальный эффект — получаем UI из реестра
-                        const ui = (window.ManagerRegistry) ? window.ManagerRegistry.get('ui') : null;
-                        if (ui && typeof ui.spawnFloatingText === 'function') {
-                            ui.spawnFloatingText(x, y, `+${collected.format()}`, '#ffdd44');
-                        }
-                        
-                        // Частицы — получаем particle из реестра
-                        const particleManager = (window.ManagerRegistry) ? window.ManagerRegistry.get('particle') : null;
-                        if (particleManager && typeof particleManager.burst === 'function') {
-                            particleManager.burst(x, y, '#ffdd44');
-                        }
-                        
+                        const ui = window.ManagerRegistry ? window.ManagerRegistry.get('ui') : null;
+                        if (ui && ui.spawnFloatingText) ui.spawnFloatingText(x, y, '+' + collected.format(), '#ffdd44');
+                        const pm = window.ManagerRegistry ? window.ManagerRegistry.get('particle') : null;
+                        if (pm && pm.burst) pm.burst(x, y, this.lineColors[lineId] || '#ffdd44');
                         return true;
                     }
                 }
@@ -286,26 +311,21 @@ class FactoryManager {
         }
         return false;
     }
-    
-    // Сохранение и загрузка
+
     getSaveData() {
         const data = {};
-        for (const [lineId, line] of this.lines) {
-            data[lineId] = line.getSaveData();
-        }
+        for (const [lineId, line] of this.lines) data[lineId] = line.getSaveData();
         return data;
     }
-    
+
     loadSaveData(data) {
         if (!data) return;
-        
         for (const [lineId, lineData] of Object.entries(data)) {
             const line = this.lines.get(lineId);
-            if (line) {
-                line.loadSaveData(lineData);
-            }
+            if (line) line.loadSaveData(lineData);
         }
-        
-        Logger.info('FactoryManager', 'Данные фабрики загружены');
+        Logger.info('FactoryManager', 'Данные загружены');
     }
 }
+
+window.FactoryManager = FactoryManager;

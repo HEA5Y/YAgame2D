@@ -1,143 +1,140 @@
-/**
- * Класс BootScene
- * Начальная сцена загрузки, автоматически переключается в MainGameScene.
- */
-class BootScene {
-    constructor(sceneManager) {
-        this.sceneManager = sceneManager;
+class BackgroundParticles {
+    constructor(count = 30) {
+        this.particles = [];
+        this.emojis = ['🧠', '🪙', '💎', '⚡', '🔥', '✨', '🧬', '🧪'];
+        for (let i = 0; i < count; i++) {
+            this.particles.push(this.createParticle());
+        }
     }
-    enter() {
-        Logger.info('BootScene', 'Вход в BootScene. Автоматический переход в MainGameScene.');
-        setTimeout(() => {
-            this.sceneManager.changeScene('MainGameScene');
-        }, 100);
+
+    createParticle() {
+        return {
+            x: Math.random(),
+            y: Math.random(),
+            emoji: this.emojis[Math.floor(Math.random() * this.emojis.length)],
+            size: 14 + Math.random() * 18,
+            speedX: (Math.random() - 0.5) * 0.02,
+            speedY: (Math.random() - 0.5) * 0.015,
+            rotation: Math.random() * Math.PI * 2,
+            rotSpeed: (Math.random() - 0.5) * 0.02,
+            opacity: 0.08 + Math.random() * 0.15,
+            pulsePhase: Math.random() * Math.PI * 2,
+            pulseSpeed: 0.5 + Math.random() * 1.5
+        };
     }
-    exit() {}
-    update(dt) {}
-    render(ctx) {
-        // Очистка или заставка
+
+    update(dt) {
+        for (const p of this.particles) {
+            p.x += p.speedX * dt;
+            p.y += p.speedY * dt;
+            p.rotation += p.rotSpeed * dt;
+            p.pulsePhase += p.pulseSpeed * dt;
+
+            if (p.x < -0.05) p.x = 1.05;
+            if (p.x > 1.05) p.x = -0.05;
+            if (p.y < -0.05) p.y = 1.05;
+            if (p.y > 1.05) p.y = -0.05;
+        }
+    }
+
+    render(ctx, W, H) {
+        for (const p of this.particles) {
+            const px = p.x * W;
+            const py = p.y * H;
+            const pulse = 1 + Math.sin(p.pulsePhase) * 0.15;
+            const size = p.size * pulse;
+
+            ctx.save();
+            ctx.translate(px, py);
+            ctx.rotate(p.rotation);
+            ctx.globalAlpha = p.opacity;
+            ctx.font = size + 'px Arial';
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.fillText(p.emoji, 0, 0);
+            ctx.restore();
+        }
+        ctx.globalAlpha = 1;
     }
 }
 
-/**
- * Класс MainGameScene
- * Основная игровая сцена с фабрикой и HUD.
- */
+class BootScene {
+    constructor(sceneManager) { this.sceneManager = sceneManager; }
+    enter() { setTimeout(() => this.sceneManager.changeScene('MainGameScene'), 100); }
+    exit() {}
+    update(dt) {}
+    render(ctx, W, H) {}
+}
+
 class MainGameScene {
     constructor(sceneManager) {
         this.sceneManager = sceneManager;
+        this.particles = new BackgroundParticles(25);
+        this.time = 0;
     }
-    enter() {
-        Logger.info('MainGameScene', 'Игровая сцена активирована.');
-    }
+    enter() { Logger.info('MainGameScene', 'active'); }
     exit() {}
     update(dt) {
-        // Обновление фабричных линий через реестр
-        const factoryManager = ManagerRegistry.get('factory');
-        if (factoryManager && typeof factoryManager.update === 'function') {
-            factoryManager.update(dt);
-        }
+        this.time += dt;
+        this.particles.update(dt);
+        const fm = ManagerRegistry.get('factory');
+        if (fm && fm.update) fm.update(dt);
     }
-    render(ctx) {
-        const factoryManager = ManagerRegistry.get('factory');
-        const economyManager = ManagerRegistry.get('economy');
-        
-        // Рендерим фон сцены
-        ctx.fillStyle = '#141923';
-        ctx.fillRect(0, 0, GameConfig.ENGINE.CANVAS_LOGICAL_WIDTH, GameConfig.ENGINE.CANVAS_LOGICAL_HEIGHT);
-        
-        // Заголовок
-        ctx.fillStyle = '#ffffff';
-        ctx.font = 'bold 36px Arial';
+    render(ctx, W, H) {
+        ctx.fillStyle = '#0d111a';
+        ctx.fillRect(0, 0, W, H);
+
+        ctx.strokeStyle = 'rgba(124,58,237,0.04)';
+        ctx.lineWidth = 1;
+        for (let x = 0; x < W; x += 40) { ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, H); ctx.stroke(); }
+        for (let y = 0; y < H; y += 40) { ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(W, y); ctx.stroke(); }
+
+        this.particles.render(ctx, W, H);
+
+        ctx.strokeStyle = 'rgba(124,58,237,0.15)';
+        ctx.lineWidth = 2;
+        ctx.strokeRect(16, 40, W - 32, H - 56);
+
+        const titlePulse = 1 + Math.sin(this.time * 2) * 0.02;
+        ctx.save();
+        ctx.translate(W / 2, 28);
+        ctx.scale(titlePulse, titlePulse);
+        ctx.fillStyle = '#fff';
+        ctx.font = 'bold 20px Montserrat, Arial, sans-serif';
         ctx.textAlign = 'center';
-        ctx.fillText('🧠 Brainrot Factory Evolution', 540, 80);
-        
-        // Рендерим фабрику
-        if (factoryManager && typeof factoryManager.render === 'function') {
-            factoryManager.render(ctx);
-        }
-        
-        // Отображение ресурсов вверху экрана
-        if (economyManager) {
-            const currency = economyManager.getBalance('coins');
-            ctx.fillStyle = '#ffdd44';
-            ctx.font = 'bold 28px Arial';
-            ctx.textAlign = 'left';
-            ctx.fillText(`💰 ${currency.format()}`, 20, 50);
-        }
+        ctx.textBaseline = 'alphabetic';
+        ctx.shadowColor = 'rgba(124,58,237,0.5)';
+        ctx.shadowBlur = 15;
+        ctx.fillText('🏭 Brainrot Factory', 0, 0);
+        ctx.restore();
+
+        const fm = ManagerRegistry.get('factory');
+        if (fm && fm.render) fm.render(ctx, W, H);
     }
 }
 
-/**
- * Класс SceneManager
- * Управляет жизненным циклом и переключением игровых сцен (экранов).
- */
 class SceneManager {
-    /**
-     * @param {Game} game Главный экземпляр игры
-     */
     constructor(game) {
         this.game = game;
         this.scenes = new Map();
         this.currentScene = null;
         this.currentSceneName = '';
     }
-
-    /**
-     * Инициализация сцен (вызывается после загрузки всех скриптов и менеджеров)
-     */
     initScenes() {
         this.registerScene('BootScene', new BootScene(this));
         this.registerScene('MainGameScene', new MainGameScene(this));
-        
-        // Автоматический старт с BootScene
         this.changeScene('BootScene');
     }
-
-    /**
-     * Зарегистрировать сцену в менеджере
-     * @param {string} name Имя сцены
-     * @param {Object} sceneInstance Экземпляр сцены
-     */
-    registerScene(name, sceneInstance) {
-        this.scenes.set(name, sceneInstance);
-    }
-
-    /**
-     * Переключиться на другую сцену
-     * @param {string} name Имя сцены
-     */
+    registerScene(name, scene) { this.scenes.set(name, scene); }
     changeScene(name) {
-        if (!this.scenes.has(name)) {
-            Logger.error('SceneManager', `Попытка переключиться на несуществующую сцену: ${name}`);
-            return;
-        }
-
-        Logger.info('SceneManager', `Переключение сцены: ${this.currentSceneName} -> ${name}`);
-
-        // Выход из текущей сцены
-        if (this.currentScene && typeof this.currentScene.exit === 'function') {
-            this.currentScene.exit();
-        }
-
+        if (!this.scenes.has(name)) return;
+        if (this.currentScene && this.currentScene.exit) this.currentScene.exit();
         this.currentSceneName = name;
         this.currentScene = this.scenes.get(name);
-
-        // Вход в новую сцену
-        if (this.currentScene && typeof this.currentScene.enter === 'function') {
-            this.currentScene.enter();
-        }
+        if (this.currentScene && this.currentScene.enter) this.currentScene.enter();
     }
-
-    update(dt) {
-        if (this.currentScene && typeof this.currentScene.update === 'function') {
-            this.currentScene.update(dt);
-        }
-    }
-
-    render(ctx) {
-        if (this.currentScene && typeof this.currentScene.render === 'function') {
-            this.currentScene.render(ctx);
-        }
-    }
+    update(dt) { if (this.currentScene && this.currentScene.update) this.currentScene.update(dt); }
+    render(ctx, W, H) { if (this.currentScene && this.currentScene.render) this.currentScene.render(ctx, W, H); }
 }
+
+window.SceneManager = SceneManager;

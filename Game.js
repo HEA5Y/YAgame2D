@@ -1,202 +1,131 @@
-/**
- * Game.js
- * Главный класс-оркестратор с защитным Watchdog-таймером от зависаний.
- */
 class Game {
     constructor() {
         if (window.gameInstance) {
-            Logger.warn('Game', 'Game уже создан, возвращаем существующий экземпляр');
+            Logger.warn('Game', 'Game уже создан');
             return window.gameInstance;
         }
         window.gameInstance = this;
         this.isRunning = false;
         this.managers = {};
-
-        // АБСОЛЮТНЫЙ СТРАХУЮЩИЙ ТАЙМЕР (Watchdog)
-        // Что бы ни случилось (ошибка в SDK, зависание ассетов), 
-        // ровно через 2.5 секунды экран загрузки будет принудительно удален, а игра запущена.
-        this.initWatchdog(2500);
+        this.initWatchdog(3000);
     }
 
-    initWatchdog(timeoutMs) {
+    initWatchdog(ms) {
         setTimeout(() => {
             if (document.getElementById('loading-screen')) {
-                Logger.warn('Game', 'Watchdog сработал: принудительный запуск из-за затянувшейся загрузки.');
+                Logger.warn('Game', 'Watchdog: force start');
                 this.forceStartGame();
             }
-        }, timeoutMs);
+        }, ms);
     }
 
-    /**
-     * Главный метод инициализации игры
-     */
     async init() {
-        Logger.info('Game', 'Инициализация игровых систем...');
-
+        Logger.info('Game', 'init...');
         try {
-            // Получаем все менеджеры из реестра и сохраняем в this.managers
-            const registry = window.ManagerRegistry;
-            this.managers.save = registry.get('save');
-            this.managers.economy = registry.get('economy');
-            this.managers.time = registry.get('time');
-            this.managers.factory = registry.get('factory');
-            this.managers.upgrade = registry.get('upgrade');
-            this.managers.ui = registry.get('ui');
-            this.managers.scene = registry.get('scene');
-            this.managers.prestige = registry.get('prestige');
-            this.managers.canvas = registry.get('canvas');
+            const reg = window.ManagerRegistry;
+            this.managers.save = reg.get('save');
+            this.managers.economy = reg.get('economy');
+            this.managers.time = reg.get('time');
+            this.managers.factory = reg.get('factory');
+            this.managers.upgrade = reg.get('upgrade');
+            this.managers.ui = reg.get('ui');
+            this.managers.scene = reg.get('scene');
+            this.managers.prestige = reg.get('prestige');
+            this.managers.canvas = reg.get('canvas');
 
-            // Инициализация Canvas
-            const canvasElement = document.getElementById('game-canvas');
-            if (canvasElement && this.managers.canvas) {
-                this.managers.canvas.init(canvasElement);
-            }
+            const canvasEl = document.getElementById('game-canvas');
+            if (canvasEl && this.managers.canvas) this.managers.canvas.init(canvasEl);
 
-            // Загрузка сохранения
-            const hasSave = (this.managers.save && typeof this.managers.save.loadGame === 'function') 
-                ? await this.managers.save.loadGame() 
-                : false;
+            const hasSave = (this.managers.save && this.managers.save.loadGame)
+                ? await this.managers.save.loadGame() : false;
 
-            // Безопасная инициализация SDK / Ресурсов с таймаутом
             await this.safeAsyncInit();
 
-            // Расчет оффлайн-прогресса
-            if (hasSave && this.managers.time && typeof this.managers.time.getOfflineSeconds === 'function') {
-                const offlineSeconds = this.managers.time.getOfflineSeconds();
-                if (offlineSeconds > 10 && this.managers.factory && typeof this.managers.factory.processOfflineIncome === 'function') {
-                    const earned = this.managers.factory.processOfflineIncome(offlineSeconds);
-                    if (earned && typeof earned.isGreaterThan === 'function' && earned.isGreaterThan(0)) {
-                        if (this.managers.ui && typeof this.managers.ui.showOfflinePopup === 'function') {
-                            this.managers.ui.showOfflinePopup(earned, offlineSeconds);
-                        }
+            if (hasSave && this.managers.time && this.managers.time.getOfflineSeconds) {
+                const offSec = this.managers.time.getOfflineSeconds();
+                if (offSec > 10 && this.managers.factory && this.managers.factory.processOfflineIncome) {
+                    const earned = this.managers.factory.processOfflineIncome(offSec);
+                    if (earned && earned.isGreaterThan && earned.isGreaterThan(0) && this.managers.ui) {
+                        this.managers.ui.showOfflinePopup(earned, offSec);
                     }
                 }
             }
 
-            // Инициализация сцен
-            if (this.managers.scene && typeof this.managers.scene.initScenes === 'function') {
-                this.managers.scene.initScenes();
-            }
+            if (this.managers.scene && this.managers.scene.initScenes) this.managers.scene.initScenes();
+            if (this.managers.ui && this.managers.ui.init) this.managers.ui.init();
 
             this.forceStartGame();
-        } catch (error) {
-            Logger.error('Game', 'Ошибка в init: ' + (error.message || error));
-            console.error(error);
+        } catch (e) {
+            Logger.error('Game', 'init error: ' + (e.message || e));
+            console.error(e);
             this.forceStartGame();
         }
     }
 
     async safeAsyncInit() {
-        // Обертка для проверки YandexSDK или AssetManager, если они существуют
         return Promise.race([
-            new Promise(async (resolve) => {
-                if (typeof AssetManager !== 'undefined' && window.assetManagerInstance) {
-                    // пример ожидания ассетов, если применимо
-                }
-                setTimeout(resolve, 300);
-            }),
-            new Promise((resolve) => setTimeout(resolve, 1500)) // Максимум 1.5 сек на асинхронщину
+            new Promise(r => setTimeout(r, 300)),
+            new Promise(r => setTimeout(r, 1500))
         ]);
     }
 
-    /**
-     * Принудительный показ игры и запуск цикла
-     */
     forceStartGame() {
-        // Убираем экран загрузки
         const loader = document.getElementById('loading-screen');
         if (loader) {
             loader.style.opacity = '0';
             loader.style.transition = 'opacity 0.3s ease';
             setTimeout(() => loader.remove(), 300);
         }
-
-        // Показываем контейнер игры
-        const container = document.getElementById('game-container');
-        if (container) {
-            container.style.display = 'block';
+        const app = document.getElementById('game-app');
+        if (app) {
+            app.style.display = 'flex';
         }
-
         this.startLoop();
         this.setupInputHandlers();
     }
 
-    /**
-     * Настройка обработчиков ввода (клик/тач)
-     */
     setupInputHandlers() {
         const canvas = document.getElementById('game-canvas');
         if (!canvas || !this.managers.canvas) return;
 
-        const handlePointer = (e) => {
-            const rect = canvas.getBoundingClientRect();
-            const scaleX = canvas.width / rect.width;
-            const scaleY = canvas.height / rect.height;
-            
-            const screenX = (e.clientX - rect.left) * scaleX;
-            const screenY = (e.clientY - rect.top) * scaleY;
-            
-            // Конвертируем в мировые координаты
-            const worldPos = this.managers.canvas.screenToWorld(screenX, screenY);
-            
-            // Передаём клик в FactoryManager
-            if (this.managers.factory && typeof this.managers.factory.handleClick === 'function') {
-                const handled = this.managers.factory.handleClick(worldPos.x, worldPos.y);
-                if (handled) {
-                    e.preventDefault();
-                }
+        const handle = (e) => {
+            const pos = this.managers.canvas.screenToWorld(e.clientX, e.clientY);
+            if (this.managers.factory && this.managers.factory.handleClick) {
+                if (this.managers.factory.handleClick(pos.x, pos.y)) e.preventDefault();
             }
         };
 
-        canvas.addEventListener('click', handlePointer);
+        canvas.addEventListener('click', handle);
         canvas.addEventListener('touchstart', (e) => {
-            if (e.touches.length === 1) {
-                const touch = e.touches[0];
-                handlePointer(touch);
-            }
+            if (e.touches.length === 1) handle(e.touches[0]);
         }, { passive: false });
     }
 
-    /**
-     * Запуск главного игрового цикла
-     */
     startLoop() {
         if (this.isRunning) return;
         this.isRunning = true;
+        let last = performance.now();
 
-        let lastFrameTime = performance.now();
-
-        const loop = (currentTime) => {
+        const loop = (now) => {
             if (!this.isRunning) return;
+            const dt = Math.min((now - last) / 1000, 0.1);
+            last = now;
 
-            const dt = (currentTime - lastFrameTime) / 1000;
-            lastFrameTime = currentTime;
-            const safeDt = dt > 0.1 ? 0.1 : dt;
+            if (this.managers.factory && this.managers.factory.update) this.managers.factory.update(dt);
+            const tween = window.ManagerRegistry ? window.ManagerRegistry.get('tween') : null;
+            if (tween && tween.update) tween.update(dt);
+            if (this.managers.scene && this.managers.scene.update) this.managers.scene.update(dt);
 
-            // Обновление фабрики
-            if (this.managers.factory && typeof this.managers.factory.update === 'function') {
-                this.managers.factory.update(safeDt);
-            }
-            
-            // Обновление твинов
-            const tweenManager = window.ManagerRegistry ? window.ManagerRegistry.get('tween') : null;
-            if (tweenManager && typeof tweenManager.update === 'function') {
-                tweenManager.update(safeDt);
-            }
-
-            // Обновление сцены
-            if (this.managers.scene && typeof this.managers.scene.update === 'function') {
-                this.managers.scene.update(safeDt);
-            }
-
-            // Рендер
             if (this.managers.canvas && this.managers.canvas.getCtx()) {
                 const ctx = this.managers.canvas.getCtx();
+                const W = this.managers.canvas.getWidth();
+                const H = this.managers.canvas.getHeight();
                 this.managers.canvas.clear();
-                
-                if (this.managers.scene && typeof this.managers.scene.render === 'function') {
-                    this.managers.scene.render(ctx);
+                if (this.managers.scene && this.managers.scene.render) {
+                    this.managers.scene.render(ctx, W, H);
                 }
+                const pm = window.ManagerRegistry ? window.ManagerRegistry.get('particle') : null;
+                if (pm && pm.render) pm.render(ctx);
             }
 
             requestAnimationFrame(loop);
@@ -205,5 +134,3 @@ class Game {
         requestAnimationFrame(loop);
     }
 }
-
-// Автозапуск УБРАН — запуск происходит из main.js
